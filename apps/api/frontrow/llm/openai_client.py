@@ -31,6 +31,13 @@ class OpenAIClient(LLMClient):
                 "environment variable to use the OpenAI client."
             )
         self._client = AsyncOpenAI(api_key=key)
+        self._closed = False
+
+    async def aclose(self) -> None:
+        """Release the SDK's pooled HTTP client once requests have stopped."""
+        if not self._closed:
+            await self._client.close()
+            self._closed = True
 
     async def complete(
         self, system: str, user: str, *, model: str, timeout: float

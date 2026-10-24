@@ -47,7 +47,7 @@ Slides (PDF) ──► per-slide text ──────────────
 | Orchestration: tick loop, listeners, grounding, moderator, Q&A, answer judging | Done, verified offline |
 | Server: REST + WebSocket, PDF slides, TTS/STT engine hooks | Done |
 | Report | v0: room score per tick, answer verdicts, delivery stats. Slide × persona heatmap and top fixes still to come |
-| Speech: ElevenLabs STT token + TTS engines | In progress |
+| Speech: ElevenLabs STT token + TTS engines | Integrated through optional provider extra |
 | Frontend (`apps/web`) | In progress |
 
 ## Repository layout
@@ -113,17 +113,26 @@ The backend uses [uv](https://docs.astral.sh/uv/).
 ```bash
 cd apps/api
 uv sync
-cp ../../.env.example ../../.env      # FRONTROW_LLM=fake runs fully offline
+cp -n ../../.env.example ../../.env   # FRONTROW_LLM=fake runs fully offline
 
 uv run python verify.py               # offline checks
 uv run python demo.py                 # replay the sample talk, print the room score per tick
-uv run uvicorn frontrow.server:app --reload    # API at http://127.0.0.1:8000 (docs at /docs)
+uv run uvicorn frontrow.server:app --env-file ../../.env --reload  # API at :8000
 
 # in a second terminal: a scripted "browser" against the running server
 uv run python -m frontrow.fake_client --tick 5 --speed 2 --take-hands
 ```
 
-To use a real model, set `FRONTROW_LLM=openai` and `OPENAI_API_KEY`, then `uv sync --extra openai`.
+The demo uses Claude: set `FRONTROW_LLM=anthropic` and `ANTHROPIC_API_KEY`, then
+`uv sync --extra anthropic`. OpenAI stays supported through `FRONTROW_LLM=openai`,
+`OPENAI_API_KEY`, and `--extra openai`. Leave `FRONTROW_LLM_MODEL` blank for the
+provider default (`claude-haiku-5-5` or `gpt-4o-mini`).
+
+For voice, also install `--extra elevenlabs` and set `FRONTROW_TTS=elevenlabs`,
+`FRONTROW_STT=elevenlabs`, and `ELEVENLABS_API_KEY`. `FRONTROW_TTS_MODEL` defaults
+to `eleven_flash_v2_5`. The backend reuses pooled HTTP clients and closes them on
+shutdown; only single-use Scribe tokens reach the browser. Inspect voices with
+`uv run python scripts/list_voices.py` from `apps/api/`.
 
 After changing `frontrow/protocol.py`, regenerate the schema:
 
@@ -133,6 +142,6 @@ uv run python -m frontrow.protocol > ../../packages/protocol/schema.json
 
 ## Tech
 
-Python, FastAPI, asyncio, Pydantic, OpenAI models for listener reactions, ElevenLabs for speech-to-text and text-to-speech, React, Vite.
+Python, FastAPI, asyncio, Pydantic, Claude for demo reactions (OpenAI also supported), ElevenLabs for speech-to-text and text-to-speech, React, Vite.
 
 ## Team

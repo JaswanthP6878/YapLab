@@ -95,17 +95,25 @@ class Config(BaseModel):
 
         Explicit ``overrides`` take precedence over environment values.
         """
+        tick_interval = _env_float("FRONTROW_TICK_INTERVAL_SECONDS", 15.0)
+        # Shorter demo ticks need an implicit listener deadline below the tick.
+        # Explicit timeouts still go through the normal consistency validation.
+        try:
+            effective_tick = float(overrides.get("tick_interval_seconds", tick_interval))
+        except (TypeError, ValueError):
+            effective_tick = tick_interval  # Config validation reports invalid overrides.
+        listener_timeout_default = min(10.0, effective_tick * 2 / 3)
+        provider = _env_str("FRONTROW_LLM", "fake").strip().lower()
+        model_default = "claude-haiku-5-5" if provider == "anthropic" else "gpt-4o-mini"
         values: dict[str, object] = {
-            "tick_interval_seconds": _env_float(
-                "FRONTROW_TICK_INTERVAL_SECONDS", 15.0
-            ),
+            "tick_interval_seconds": tick_interval,
             "per_listener_timeout_seconds": _env_float(
-                "FRONTROW_PER_LISTENER_TIMEOUT_SECONDS", 10.0
+                "FRONTROW_PER_LISTENER_TIMEOUT_SECONDS", listener_timeout_default
             ),
             "transcript_window_seconds": _env_float(
                 "FRONTROW_TRANSCRIPT_WINDOW_SECONDS", 30.0
             ),
-            "llm_model": _env_str("FRONTROW_LLM_MODEL", "gpt-4o-mini"),
+            "llm_model": _env_str("FRONTROW_LLM_MODEL", model_default),
             "llm_timeout_seconds": _env_float("FRONTROW_LLM_TIMEOUT_SECONDS", 30.0),
             "moderator_min_interruption_gap_seconds": _env_float(
                 "FRONTROW_MODERATOR_GAP_SECONDS", 60.0

@@ -29,14 +29,14 @@ The backend owns the clock, who speaks when, and every API key. The browser owns
 ```bash
 cd apps/api
 uv sync
-uv run uvicorn frontrow.server:app --reload            # http://127.0.0.1:8000, docs at /docs
+uv run uvicorn frontrow.server:app --env-file ../../.env --reload   # http://127.0.0.1:8000
 uv run python -m frontrow.fake_client --tick 5 --speed 2 --take-hands   # a scripted "browser"
 uv run python verify.py                                 # offline checks
 ```
 
 `fake_client.py` is a working reference for the whole message flow; read it alongside this doc.
 
-Environment (see `.env.example`): `FRONTROW_LLM=fake|openai`, `OPENAI_API_KEY`, `FRONTROW_CORS_ORIGINS` (comma-separated, default `*`), plus the tunables in `frontrow/config.py`.
+Environment (see `.env.example`): `FRONTROW_LLM=fake|openai|anthropic`, the selected provider's API key, `FRONTROW_CORS_ORIGINS` (comma-separated, default `*`), plus the tunables in `frontrow/config.py`. Install `uv sync --extra anthropic` for Claude or `--extra openai` for OpenAI. If `FRONTROW_LLM_MODEL` is unset/blank, the defaults are `claude-haiku-5-5` for Anthropic and `gpt-4o-mini` for OpenAI. Shorter ticks use a shorter implicit listener timeout; explicitly configured timeouts must remain below the tick interval.
 
 ## 3. Session lifecycle
 
@@ -165,6 +165,8 @@ class STTTokenProvider(Protocol):
 
 **Wiring.** Return your engines from `speech_engines_from_env()` in `frontrow/server.py` (e.g. pick by `FRONTROW_TTS=elevenlabs`), or pass them to `create_app(tts=..., stt_tokens=...)`. The defaults (`NoTTS`, `NoSTTTokens`) mean text-only questions and a `501` from the token endpoint.
 
+**ElevenLabs.** Install `uv sync --extra elevenlabs`, set `ELEVENLABS_API_KEY`, and select `FRONTROW_TTS=elevenlabs` and/or `FRONTROW_STT=elevenlabs`. `FRONTROW_TTS_MODEL` defaults to `eleven_flash_v2_5`; conversational v4/v3 models use the dialogue WebSocket. Each engine reuses its HTTP client until app shutdown. `frontrow/voices.json` maps persona names to primary/alternate voices, selected by listener number modulo list length; inspect the account with `uv run python scripts/list_voices.py`. Scribe tokens expire after 900 seconds and expose `model_id=scribe_v2_realtime`, `vad_silence_threshold_secs=0.7`, and `include_timestamps=true` alongside the token. Unset/`none` retains the stand-ins; unknown engine values fail clearly.
+
 **TTS expectations**
 - Called once per question when it is raised (`hand_raised`) or asked in Q&A (`qa_question`); the result is cached per `question_id` and served at `/sessions/{id}/audio/{question_id}`.
 - Pick the voice from `persona` (one distinct voice per persona); use `listener_id` to vary voices when a room has two of the same persona (`lecture_hall`).
@@ -180,4 +182,4 @@ class STTTokenProvider(Protocol):
 
 - Sessions live in memory in one process: restarting the server loses them, and there's no auth.
 - `GET /report` is a v0 summary: room score per tick, question/answer verdict counts, and delivery stats (words, wpm, fillers, longest pause). The per-slide × persona heatmap and top fixes are still to come.
-- With `FRONTROW_LLM=fake`, reactions and verdicts are deterministic placeholders, good for building UI, not for judging a talk. Use `FRONTROW_LLM=openai` with `OPENAI_API_KEY` (and `uv sync --extra openai`) for real reactions.
+- With `FRONTROW_LLM=fake`, reactions and verdicts are deterministic placeholders, good for building UI, not for judging a talk. The demo uses `FRONTROW_LLM=anthropic` with `ANTHROPIC_API_KEY` (`uv sync --extra anthropic`); OpenAI remains supported with `FRONTROW_LLM=openai`, `OPENAI_API_KEY`, and `--extra openai`.
