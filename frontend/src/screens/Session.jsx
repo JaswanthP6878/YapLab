@@ -95,6 +95,7 @@ export default function Session({ config: initialConfig, onExit, onEnd, onAgentE
     onAgentEvent: (event) => { const action = agentEventToAction(event); if (action) dispatch(action); },
   });
   const liveReady = ['presenting', 'qa'].includes(live.status) && live.connectionState === 'connected';
+  const liveCanSpeak = live.connectionState === 'connected' && ['idle', 'presenting', 'qa'].includes(live.status);
   const clockRunning = liveMode ? liveReady : running;
 
   useEffect(() => {
@@ -122,6 +123,13 @@ export default function Session({ config: initialConfig, onExit, onEnd, onAgentE
   };
   const demoSpeech = useSpeechRecognition(respond);
   const speech = liveMode ? live.speech : demoSpeech;
+  const toggleSpeech = async () => {
+    if (speech.listening) { speech.stop(); return; }
+    try {
+      if (liveMode) await live.beginTalk();
+      await speech.start();
+    } catch { /* The bridge displays request errors and keeps Speak retryable. */ }
+  };
 
   // Outbound AgentEvents for a 3D classroom or analytics; inbound test hook on window.
   useEffect(() => {
@@ -259,15 +267,15 @@ export default function Session({ config: initialConfig, onExit, onEnd, onAgentE
         <div className="ctl-mid">
           <button
             className={`btn btn-mic ${speech.listening ? 'on' : ''}`}
-            onClick={() => (speech.listening ? speech.stop() : speech.start())}
-            disabled={!speech.supported || (liveMode && !liveReady)}
+            onClick={toggleSpeech}
+            disabled={!speech.supported || (liveMode && !liveCanSpeak)}
             title={speech.supported ? '' : liveMode ? 'Your microphone is unavailable in this browser' : 'Live speech needs Chrome or Edge'}
           >
             <Icon name="mic" /> {speech.listening ? 'Stop' : mode.id === 'interview' ? 'Answer' : 'Speak'}
           </button>
           <form className="say" onSubmit={async (e) => { e.preventDefault(); if (await respond(draft) !== false) setDraft(''); }}>
             <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={mode.id === 'interview' ? 'Or type your answer…' : 'Or type to the room…'} autoComplete="off" aria-label="Type to the room" />
-            <button type="submit" className="icon-btn" aria-label="Send" disabled={!draft.trim() || (liveMode && !liveReady)}><Icon name="arrow" size={16} /></button>
+            <button type="submit" className="icon-btn" aria-label="Send" disabled={!draft.trim() || (liveMode && !liveCanSpeak)}><Icon name="arrow" size={16} /></button>
           </form>
         </div>
 

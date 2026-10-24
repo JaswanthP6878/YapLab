@@ -7,6 +7,7 @@ import { agentIdFor, buildListenerMap, eventMetadata, listenerMetadata, mapAgent
 import { demoDeckSlides } from './sessionState.js';
 import { applyHandEvent, createDebugHistory, createSlideSync } from './hookState.js';
 import { useScribeSpeech } from './useScribeSpeech.js';
+import { createTalkLifecycle } from './talkLifecycle.js';
 
 /**
  * Teaching-only bridge. `enabled` lets a caller mount this hook beside demo hooks
@@ -76,6 +77,7 @@ export function useLiveSession({ config, onAgentEvent, onTranscript, enabled = t
       request: (type, fields) => run.socket.request(type, fields),
       onError: fail,
     });
+    run.talk = createTalkLifecycle(run, { request, changePhase, sendText: (text) => speechRef.current.sendText(text) });
     run.ambience = createAmbience();
     run.audio = createQuestionAudio({ request, apiBase: API_URL, speak, stopSpeaking,
       setMuted: (value) => speechRef.current?.setMuted(value),
@@ -170,7 +172,7 @@ export function useLiveSession({ config, onAgentEvent, onTranscript, enabled = t
         }
         // Preserve local navigation made while offline; hello's current_slide may
         // be older. Re-send before Scribe resumes, without replaying start.
-        if (reconnect) await run.slideSync.synchronize();
+        if (reconnect) await run.talk.synchronize();
         if (run.alive && version === run.transportVersion) setConnectionState(state);
       }), socket.onError(fail), socket.onEvent(handleEvent), socket.onHello((hello) => {
         run.listenerMap = buildListenerMap(hello.session.listeners);
@@ -182,14 +184,7 @@ export function useLiveSession({ config, onAgentEvent, onTranscript, enabled = t
       }));
       await socket.ready;
       if (!run.alive) return;
-      await run.slideSync.synchronize();
-      if (!run.alive) return;
-      // Track an in-flight start so exit cannot close the socket before stopping
-      // a start that the server may already have processed.
-      run.phase = 'presenting';
-      run.starting = socket.request('start');
-      await run.starting;
-      changePhase('presenting');
+      await run.talk.synchronize();
     }
     initialize().catch((problem) => { if (problem.name !== 'AbortError') fail(problem); });
     return () => {
@@ -199,17 +194,7 @@ export function useLiveSession({ config, onAgentEvent, onTranscript, enabled = t
       run.audio.dispose(); run.ambience.dispose();
       run.unsubscribers.forEach((unsubscribe) => unsubscribe());
       // There is no cancel endpoint. Close the lifecycle so ticks/provider calls stop.
-      async function shutdown() {
-        if (!run.socket) return;
-        try {
-          await run.starting?.catch(() => {});
-          if (run.phase === 'presenting') { await request('end_presenting'); run.phase = 'qa'; }
-          if (run.phase === 'qa') { await request('end_qa'); run.phase = 'reporting'; }
-          if (run.phase === 'reporting') await request('finish');
-        } catch { /* A disconnected in-memory session cannot be cancelled over HTTP. */ }
-        finally { run.socket.close(); }
-      }
-      void shutdown();
+      void run.talk.shutdown();
       if (runtime.current === run) runtime.current = null;
     };
   }, [enabled]);
@@ -253,9 +238,21 @@ export function useLiveSession({ config, onAgentEvent, onTranscript, enabled = t
     return result;
   }, [request]);
   const resumeAudio = useCallback(() => { runtime.current?.audio.resume(); runtime.current?.ambience.resume(); }, []);
+  const beginTalk = useCallback(async () => {
+    const run = runtime.current;
+    if (!run?.talk) throw new Error('Wait for the live session to connect.');
+    try { return await run.talk.beginTalk(); }
+    catch (problem) { if (run.alive) setError(problem.message); throw problem; }
+  }, []);
+  const submitText = useCallback(async (text) => {
+    const run = runtime.current;
+    if (!run?.talk) return null;
+    try { return await run.talk.submitText(text); }
+    catch (problem) { if (run.alive) setError(problem.message); throw problem; }
+  }, []);
   return { status: ['connecting', 'reconnecting'].includes(connectionState) ? connectionState : phase,
     connectionState, sessionId, speech, agents, hands, listeners, room, activeQuestion, error,
     events: debugLogs ? events : [], transcriptAcks: debugLogs ? transcriptAcks : [],
     audioBlocked, questionPlayback, resumeAudio, callOn, answerDone, setSlide, endTalk,
-    nextQuestion, finishQA, report, submitText: speech.sendText };
+    nextQuestion, finishQA, report, beginTalk, submitText };
 }
