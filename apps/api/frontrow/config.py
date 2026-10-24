@@ -88,6 +88,8 @@ class Config(BaseModel):
     llm_timeout_seconds: float = Field(default=30.0, gt=0)
 
     moderator_min_interruption_gap_seconds: float = Field(default=60.0, ge=0)
+    moderator_warmup_seconds: float = Field(default=45.0, ge=0)
+    moderator_warmup_min_words: int = Field(default=60, ge=0)
 
     grounding_min_span_chars: int = Field(default=10, ge=1)
 
@@ -149,6 +151,12 @@ class Config(BaseModel):
             "llm_timeout_seconds": _env_float("FRONTROW_LLM_TIMEOUT_SECONDS", 30.0),
             "moderator_min_interruption_gap_seconds": _env_float(
                 "FRONTROW_MODERATOR_GAP_SECONDS", 60.0
+            ),
+            "moderator_warmup_seconds": _env_float(
+                "FRONTROW_MODERATOR_WARMUP_SECONDS", 45.0
+            ),
+            "moderator_warmup_min_words": _env_int(
+                "FRONTROW_MODERATOR_WARMUP_MIN_WORDS", 60
             ),
             "grounding_min_span_chars": _env_int(
                 "FRONTROW_GROUNDING_MIN_SPAN_CHARS", 10

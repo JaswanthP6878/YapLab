@@ -57,6 +57,8 @@ class Orchestrator:
         self._summarizer = summarizer
         self._talk_summary = ""
         self._summarized_until = 0.0
+        self._talk_started_at: float | None = None
+        self._total_word_count = 0
         # Clock time the most recent tick started, or None before any tick.
         self.last_tick_start: float | None = None
         self._inflight_tick: "asyncio.Task[None] | None" = None
@@ -111,6 +113,13 @@ class Orchestrator:
         """Set the slide on screen; later reactions are tagged with it."""
         self._current_slide = index
 
+    def set_talk_progress(
+        self, started_at: float | None, total_word_count: int
+    ) -> None:
+        """Track the talk's start and accepted words beyond the recent window."""
+        self._talk_started_at = started_at
+        self._total_word_count = total_word_count
+
     async def wait_idle(self) -> None:
         """Wait for the in-flight tick, if any, to finish."""
         if self._inflight_tick is not None and not self._inflight_tick.done():
@@ -134,6 +143,11 @@ class Orchestrator:
                 memory_ticks=self._config.listener_memory_ticks,
                 talk_summary=self._talk_summary,
                 question_memory=self._config.listener_question_memory,
+                talk_elapsed_seconds=(
+                    max(0.0, self._clock.now() - self._talk_started_at)
+                    if self._talk_started_at is not None
+                    else None
+                ),
             )
         )
 
@@ -267,7 +281,7 @@ class Orchestrator:
                 )
 
         raised, pooled = self._moderator.process_tick(
-            handraises, self._clock.now()
+            handraises, self._clock.now(), total_word_count=self._total_word_count
         )
 
         by_id = {lst.listener_id: lst for lst in self._listeners}

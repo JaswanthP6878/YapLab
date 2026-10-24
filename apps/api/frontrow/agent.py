@@ -92,6 +92,7 @@ class Listener:
         memory_ticks: int = 3,
         talk_summary: str = "",
         question_memory: int = 5,
+        talk_elapsed_seconds: float | None = None,
     ) -> Reaction | None:
         """Produce a :class:`Reaction` for the given transcript window.
 
@@ -116,6 +117,7 @@ class Listener:
             memory=recent,
             questions=self.questions[-question_memory:] if question_memory else [],
             talk_summary=talk_summary,
+            talk_elapsed_seconds=talk_elapsed_seconds,
         )
         payload = await self.llm.complete_json(
             system, user, model=model, timeout=timeout

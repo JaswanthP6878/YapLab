@@ -100,6 +100,8 @@ class Session:
 
         self._seen_seq: set[int] = set()
         self._last_end = 0.0
+        self._talk_started_at: float | None = None
+        self._total_word_count = 0
         self._loop_task: asyncio.Task[None] | None = None
         self._answer: _OpenAnswer | None = None
         # Echo suppression: mic input is dropped until this clock time.
@@ -143,6 +145,11 @@ class Session:
     def start(self) -> None:
         """Idle -> Presenting: start the tick loop."""
         self._transition(SessionState.PRESENTING)
+        self._talk_started_at = self._clock.now()
+        self.moderator.start(self._talk_started_at)
+        self.orchestrator.set_talk_progress(
+            self._talk_started_at, self._total_word_count
+        )
         self._loop_task = asyncio.ensure_future(
             self.orchestrator.run_while_presenting(
                 lambda: self.state is SessionState.PRESENTING
@@ -247,6 +254,10 @@ class Session:
         answer_to = self._answer.hand.question_id if self._answer else None
         chunk = TranscriptChunk(start=start, end=now, text=text, seq=seq, answer_to=answer_to)
         self._transcript.append(chunk)
+        self._total_word_count += word_count(text)
+        self.orchestrator.set_talk_progress(
+            self._talk_started_at, self._total_word_count
+        )
         self._last_end = now
         if self._answer is not None:
             self._answer.parts.append(text)
