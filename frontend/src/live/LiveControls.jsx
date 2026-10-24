@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { PERSONAS } from '../data.js';
 
 const STATUS_TEXT = {
-  idle: 'Preparing your classroom…',
+  idle: "Click Speak when you're ready. The room is listening.",
   creating: 'Opening your classroom…',
   connecting: 'Connecting to your classroom…',
   reconnecting: 'Reconnecting. Your microphone is paused.',
