@@ -5,9 +5,7 @@
 <p align="center">
   <a href="https://35-229-50-202.sslip.io">Live app</a> ·
   <a href="#quick-start">Quick start</a> ·
-  <a href="#architecture">Architecture</a> ·
-  <a href="docs/demo-video-script.md">Demo video script</a> ·
-  <a href="infra/README.md">Deploy</a>
+  <a href="#architecture">Architecture</a>
 </p>
 
 # <img src="docs/assets/yaplab-logo.svg" alt="" width="34"> YapLab
