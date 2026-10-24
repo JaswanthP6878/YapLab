@@ -7,9 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "dev:live": "vite frontend --config vite.config.js",
-    "build:live": "vite build frontend --config vite.config.js",
-    "test:live": "node --test frontend/src/live/tests/*.test.js"
+    "dev:live": "vite",
+    "build:live": "vite build",
+    "test:live": "node --test src/live/tests/*.test.js"
   },
   "dependencies": {
     "@elevenlabs/react": "1.19.1",

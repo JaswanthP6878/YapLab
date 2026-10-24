@@ -6,19 +6,18 @@ Scribe token reaches the browser.
 
 ## Run
 
-Use the voice backend branch (`zukhriddin/voice-integration`, PR #1), in its own
-checkout if necessary. From `apps/api`:
+The voice backend (PR #1) is on `main`. From `apps/api`:
 
 ```sh
 uv sync --extra elevenlabs --extra anthropic
-FRONTROW_LLM=fake FRONTROW_TTS=elevenlabs FRONTROW_STT=elevenlabs FRONTROW_TICK_INTERVAL_SECONDS=5 uv run uvicorn frontrow.server:app --env-file ../../.env --host 127.0.0.1 --port 8000
+FRONTROW_LLM=fake FRONTROW_TTS=elevenlabs FRONTROW_STT=elevenlabs FRONTROW_TICK_INTERVAL_SECONDS=5 uv run uvicorn frontrow.server:app --host 127.0.0.1 --port 8000
 ```
 
 For Claude, set `FRONTROW_LLM=anthropic` and provide `ANTHROPIC_API_KEY` in that
 backend root `.env`. Supply `ELEVENLABS_API_KEY` there for both voice providers.
 The frontend needs no provider API keys.
 
-From the frontend repository root:
+From `frontend/`:
 
 ```sh
 npm ci
@@ -26,10 +25,8 @@ npm ci
 npm run dev:live -- --host 127.0.0.1
 ```
 
-Open `/live-test.html` for the test bench or `/` for the product UI. The original
-Vite config lives at the repository root but does not set `root`; the equivalent
-launch using the teammate's original script is
-`npm run dev -- frontend --config vite.config.js --host 127.0.0.1`.
+Open `/live-test.html` for the test bench or `/` for the product UI.
+`npm run dev -- --host 127.0.0.1` is equivalent.
 
 Use headphones. Start the session, enable audio, start the microphone, then speak
 with pauses. Captions are committed only after `accepted: true`. The bench also
@@ -97,12 +94,11 @@ audiences, question frequency and seriousness are not supported by this preset.
 
 ```sh
 npm run test:live
-npm run build -- frontend --config vite.config.js --outDir /private/tmp/frontrow-live-build
+npm run build
 ```
 
-`build:live` is also available. The explicit output directory above avoids
-touching the teammate's tracked `frontend/dist`. Never stage generated dist or
-node_modules files. Tests cover transport correlation/replay, persona mapping,
+`build:live` is also available. `frontend/dist` and `node_modules` are
+git-ignored; never stage them. Tests cover transport correlation/replay, persona mapping,
 Scribe sequence/duration and mute filtering, audio FIFO/fallback lifetime and
 ambience throttles. Hardware microphone and audible voice quality require a
 browser check; mocked SDK events alone do not establish them.
