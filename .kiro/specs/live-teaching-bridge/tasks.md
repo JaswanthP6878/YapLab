@@ -45,7 +45,7 @@
   - _Requirements: 4.5, 10.1, 10.2, 10.3_
 
 - [ ] 9. Keep the last sentence when calling on a hand
-  - A final segment for speech that ended about 0.7 s before Call on can arrive during playback and be dropped; needs a backend change (see `hand-raise-and-answers` task 9)
+  - A final segment for speech that ended about 0.7 s before Call on can arrive during playback and be dropped; needs a backend change (see `hand-raise-and-answers` task 12)
   - _Requirements: 4.2, 4.4_
 
 - [ ] 10. Custom live audiences
@@ -55,3 +55,25 @@
 - [ ] 11. Pause and cancel
   - Backend pause command and HTTP cancel endpoint so the live UI can pause and end sessions reliably
   - _Requirements: 6.6_
+
+- [x] 12. Start the talk on first presenter input
+  - [x] 12.1 `talkLifecycle.js`: one shared start promise; typed lines wait for the start ack; retry after a rejected start
+    - _Requirements: 2.5, 2.7_
+  - [x] 12.2 Connect and reconnect synchronize only the slide; idle readiness message; clock stopped while idle
+    - _Requirements: 2.4, 2.6, 3.4_
+  - [x] 12.3 Leaving closes an idle socket, or waits for a pending start and ends the lifecycle
+    - _Requirements: 2.8_
+  - [x] 12.4 `talkLifecycle.test.js` with six lifecycle checks
+    - _Requirements: 10.3_
+
+- [x] 13. Live room polish
+  - [x] 13.1 `preserveRaisedHand` keeps an actionable hand through another question's pool, lower, or take events
+    - _Requirements: 5.3_
+  - [x] 13.2 Q&A count capped at five; verdict line shown for six seconds
+    - _Requirements: 6.7, 6.8_
+  - [x] 13.3 `createSessionErrors`: source-tagged errors; slide changes clear only slide errors
+    - _Requirements: 7.3_
+  - [x] 13.4 Live report keeps the Setup config so Back to setup restores the chosen audience
+    - _Requirements: 8.3_
+  - [x] 13.5 Scribe language and secondary languages from token metadata, English defaults; backend token sets `language_code: en`
+    - _Requirements: 4.1_

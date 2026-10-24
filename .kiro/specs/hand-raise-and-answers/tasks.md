@@ -45,10 +45,34 @@
   - Replay drives a `Session` with scripted Q&A answers; `verify.py` checks for every requirement above
   - _Requirements: 1.1, 3.5, 6.1, 8.1, 9.2, 10.1_
 
-- [ ] 8. Merge similar questions across listeners
+- [x] 8. Warm-up gate
+  - [x] 8.1 Config `moderator_warmup_seconds` (45) and `moderator_warmup_min_words` (60) with environment overrides and `.env.example` entries
+    - _Requirements: 12.6_
+  - [x] 8.2 `Moderator.start` anchored by `Session.start`; cumulative accepted word count shared through `Orchestrator.set_talk_progress`
+    - _Requirements: 12.1, 12.2_
+  - [x] 8.3 Drop candidates during Warm_Up; only Speech_Grounded questions raise a hand
+    - _Requirements: 1.1, 12.3, 12.4_
+  - [x] 8.4 Elapsed talk time in the reaction prompt and waiting guidance in `REACTION_SYSTEM`
+    - _Requirements: 12.5_
+
+- [x] 9. Per-listener pool limits
+  - [x] 9.1 `_pool_tick` keeps the most confused candidate per listener; `_pool` caps two held per listener on every entry path
+    - _Requirements: 1.2, 13.1, 13.2, 13.3_
+  - [x] 9.2 `take` reserves the selected pooled question before lowering the raised hand
+    - _Requirements: 13.4_
+
+- [x] 10. Natural-hands checks
+  - Immediate-hand fixtures opt out with 0/0; `verify_natural_hands.py` (9 checks) joined into `verify.py`
+  - _Requirements: 12.1, 12.2, 12.3, 12.4, 13.1, 13.2, 13.3, 13.4_
+
+- [ ] 11. Merge similar questions across listeners
   - Count a near-duplicate question from another listener as a vote for the held question instead of a separate entry (deferred)
   - _Requirements: 1.4, 2.1_
 
-- [ ] 9. Accept late final segments that belong to the presenter
+- [ ] 12. Accept late final segments that belong to the presenter
   - A final segment for speech that ended just before `take_question` can arrive during playback and be dropped; needs coordination with the frontend bridge
   - _Requirements: 10.1_
+
+- [ ] 13. Report pool evictions
+  - Emit an event when the per-listener limit evicts a pooled question, so clients can drop it without reading `qa_pool`
+  - _Requirements: 13.2_

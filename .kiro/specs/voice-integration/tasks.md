@@ -26,7 +26,7 @@
     - _Requirements: 3.4, 3.5_
 
 - [x] 5. Speech-to-text tokens
-  - Single-use `realtime_scribe` token with expiry and connection extras
+  - Single-use `realtime_scribe` token with expiry and connection extras, including `language_code: en`
   - _Requirements: 4.1, 4.2, 4.3_
 
 - [x] 6. Safe failures

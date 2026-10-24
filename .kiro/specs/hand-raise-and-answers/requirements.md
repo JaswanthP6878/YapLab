@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This document specifies how questions from the AI listeners reach the presenter and how the presenter's answers are judged. It extends the Moderator and Q&A requirements of the orchestration spec with a classroom-style floor: a listener raises a hand and waits to be called on; only one hand is up at a time; the presenter answers out loud; the listener who asked judges the answer and may ask one follow-up. It also specifies how the backend ingests the browser's speech-to-text output and ignores the agent's own voice while question audio plays.
+This document specifies how questions from the AI listeners reach the presenter and how the presenter's answers are judged. It extends the Moderator and Q&A requirements of the orchestration spec with a classroom-style floor: a listener raises a hand and waits to be called on; only one hand is up at a time; the presenter answers out loud; the listener who asked judges the answer and may ask one follow-up. It also specifies how the backend ingests the browser's speech-to-text output and ignores the agent's own voice while question audio plays, how the room waits for the talk to warm up before anyone interrupts, and how many questions each listener may keep for Q&A.
 
 ## Glossary
 
@@ -17,6 +17,8 @@ This document specifies how questions from the AI listeners reach the presenter 
 - **Follow_Up**: A question the asking listener raises about its own Answer.
 - **Final_Segment**: A finalized speech-to-text segment from the browser, identified by an increasing `seq`.
 - **Playback_Window**: The time between `playback_started` and `playback_ended` for a question's audio.
+- **Warm_Up**: The opening of the talk, until both the warm-up time (default 45 seconds after `start`) and the warm-up word count (default 60 accepted words) are reached.
+- **Speech_Grounded**: A question whose source is `transcript` or `answer`, as opposed to `slide:N`.
 
 ## Requirements
 
@@ -26,8 +28,8 @@ This document specifies how questions from the AI listeners reach the presenter 
 
 #### Acceptance Criteria
 
-1. WHEN a Tick produces grounded questions and the Floor is free and the rate limit allows it, THE System SHALL raise exactly one of them as the Raised_Hand and add the rest to the QA_Pool.
-2. WHILE the Floor is held, THE System SHALL add every new grounded question to the QA_Pool.
+1. WHEN a Tick after Warm_Up produces grounded questions and the Floor is free and the rate limit allows it, THE System SHALL raise exactly one Speech_Grounded question as the Raised_Hand and add the rest to the QA_Pool, within the limits of Requirement 13.
+2. WHILE the Floor is held, THE System SHALL add new grounded questions to the QA_Pool, within the limits of Requirement 13.
 3. WHEN a hand is raised, THE System SHALL record a `hand_raised` event with the question id, listener, persona, spoken question, quote, and source.
 4. IF a listener raises a question with the same quote as a question it already has held, THEN THE System SHALL drop the repeat.
 
@@ -133,3 +135,27 @@ This document specifies how questions from the AI listeners reach the presenter 
 
 1. THE System SHALL ask listeners for a short spoken question (under 25 words) that does not read out the quote, separate from the quote used for grounding.
 2. THE System SHALL send both the spoken question and the quote with every question event, so that the interface can speak one and show the other.
+
+### Requirement 12: Warm-Up and Speech-Grounded Interruptions
+
+**User Story:** As a Presenter, I want the room to let me introduce my topic before anyone raises a hand, so that questions respond to what I have actually explained.
+
+#### Acceptance Criteria
+
+1. WHEN the session starts presenting, THE System SHALL anchor the Warm_Up time to that moment, not to session creation.
+2. THE System SHALL count only accepted, non-empty Final_Segments toward the warm-up word count; duplicate, empty, and echo-dropped segments SHALL NOT count, and the count SHALL NOT expire with the transcript window.
+3. WHILE the talk is in Warm_Up, THE System SHALL drop every candidate question without pooling it or adding it to the listener's question history, and SHALL keep recording reactions and talk summaries.
+4. IF a Tick after Warm_Up has no Speech_Grounded candidate, THEN THE System SHALL raise no hand and pool the slide-sourced candidates.
+5. THE System SHALL tell each listener how long the presenter has been speaking, and instruct listeners to hold questions about anything not yet explained, including slide text the presenter has not talked about.
+6. WHERE `FRONTROW_MODERATOR_WARMUP_SECONDS` or `FRONTROW_MODERATOR_WARMUP_MIN_WORDS` is set, THE System SHALL use that threshold; setting both to 0 SHALL disable Warm_Up.
+
+### Requirement 13: Question Pool Limits
+
+**User Story:** As a Presenter, I want saved questions to stay varied and manageable, so that one listener does not dominate Q&A.
+
+#### Acceptance Criteria
+
+1. WHEN a Tick produces several pooled candidates from the same listener, THE System SHALL pool only the one with the highest confusion.
+2. THE System SHALL hold at most two pooled questions per listener, replacing that listener's oldest pooled question; the Raised_Hand and Active_Question SHALL NOT count toward the limit.
+3. THE System SHALL apply the limit on every path into the QA_Pool: a Tick, a lowered or expired hand, and a deferred Follow_Up.
+4. WHEN the Presenter takes a pooled question while another hand is raised, THE System SHALL remove the selected question from the QA_Pool before lowering the raised hand, so that the limit cannot evict the question being taken.

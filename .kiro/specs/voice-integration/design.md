@@ -42,7 +42,7 @@ sequenceDiagram
 
 ## Data Models
 
-`SpeechAudio(data: bytes, content_type="audio/mpeg")`; `STTToken(token, provider="elevenlabs", expires_in_seconds=900, extra={model_id, vad_silence_threshold_secs, include_timestamps})`.
+`SpeechAudio(data: bytes, content_type="audio/mpeg")`; `STTToken(token, provider="elevenlabs", expires_in_seconds=900, extra={model_id, language_code, vad_silence_threshold_secs, include_timestamps})`.
 
 ## Error Handling
 

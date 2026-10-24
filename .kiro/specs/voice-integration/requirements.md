@@ -58,7 +58,7 @@ This document specifies the ElevenLabs implementation of the backend's two speec
 #### Acceptance Criteria
 
 1. WHEN a token is requested, THE STT_Token_Provider SHALL mint a single-use `realtime_scribe` token with SDK retries disabled.
-2. THE STT_Token_Provider SHALL return the token with provider `elevenlabs`, an expiry of 900 seconds, and the extras `model_id: scribe_v2_realtime`, `vad_silence_threshold_secs: 0.7`, and `include_timestamps: true`.
+2. THE STT_Token_Provider SHALL return the token with provider `elevenlabs`, an expiry of 900 seconds, and the extras `model_id: scribe_v2_realtime`, `language_code: en`, `vad_silence_threshold_secs: 0.7`, and `include_timestamps: true`.
 3. IF the provider returns an empty token, THEN THE STT_Token_Provider SHALL raise a speech error.
 
 ### Requirement 5: Safe Failures
