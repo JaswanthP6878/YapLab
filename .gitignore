@@ -5,6 +5,11 @@
 .env.*
 !.env.example
 eval_runs/
-
+# Frontend build artifacts
+node_modules/
+frontend/node_modules/
+frontend/dist/
+**/node_modules/
+**/dist/
 # uv / virtualenvs — commit uv.lock, never the local venv
 .venv/
