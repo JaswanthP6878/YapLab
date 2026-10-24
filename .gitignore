@@ -4,6 +4,9 @@
 .env
 .env.*
 !.env.example
+infra/deploy.env
+# Remotion renders
+video/out/
 eval_runs/
 # Frontend build artifacts
 node_modules/
@@ -13,3 +16,5 @@ frontend/dist/
 **/dist/
 # uv / virtualenvs — commit uv.lock, never the local venv
 .venv/
+# Secrets that must never be committed
+infra/**/*.token

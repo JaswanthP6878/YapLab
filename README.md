@@ -1,4 +1,16 @@
-# Front Row
+<p align="center">
+  <img src="docs/assets/yaplab-banner.png" alt="YapLab: rehearse in front of a room that talks back" width="900">
+</p>
+
+<p align="center">
+  <a href="https://35-229-50-202.sslip.io">Live app</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="docs/demo-video-script.md">Demo video script</a> ·
+  <a href="infra/README.md">Deploy</a>
+</p>
+
+# <img src="docs/assets/yaplab-logo.svg" alt="" width="34"> YapLab
 
 A practice classroom full of AI students.
 
@@ -6,14 +18,16 @@ Upload your slides, start talking, and a room of AI listeners reacts in real tim
 
 Built for Hackachusetts 2026, Civic Action track (Better college experiences).
 
+> **Naming:** the product is **YapLab**. The original code name, FrontRow, remains in the Python package (`frontrow`), the settings (`FRONTROW_*`), and the internal docs.
+
 ## Why
 
-Most students rehearse presentations alone. Practicing in front of an audience leads to better real performances, but not everyone has a study group, confident English, or time for office hours. Front Row gives every student an audience to practice with, any time, with no judgment.
+Most students rehearse presentations alone. Practicing in front of an audience leads to better real performances, but not everyone has a study group, confident English, or time for office hours. YapLab gives every student an audience to practice with, any time, with no judgment.
 
 ## What makes it different
 
 - **A whole room, not one coach.** 5 to 10 listener agents with distinct personas, not a single AI judge.
-- **Comprehension, not just delivery.** Other tools count filler words. Front Row tracks how each kind of listener followed you, tick by tick.
+- **Comprehension, not just delivery.** Other tools count filler words. YapLab tracks how each kind of listener followed you, tick by tick.
 - **Grounded questions.** Every question must quote something you actually said or showed; anything else is rejected.
 - **Behaves like a real class.** A moderator gives one student the floor at a time, waits until you have introduced your topic, and saves the rest for Q&A.
 - **Practice answering, too.** Students ask aloud in their own voices, judge your answer as answered, partial, or dodged, and may press with a follow-up.
@@ -131,16 +145,22 @@ sequenceDiagram
 | Server: REST + WebSocket, PDF slides, replay, report | Done |
 | Speech: ElevenLabs Scribe tokens and persona voices | Done (optional extra) |
 | Frontend | Teaching runs live against the backend; Pitch and Interview use the scripted demo |
+| Deployment | Live on a GCP VM with HTTPS (Caddy, Let's Encrypt) |
+| Demo video | Intro rendered with Remotion; demo recording to append |
 | Report | v0: room score per tick, answer verdicts, delivery stats. Slide × persona heatmap and top fixes still to come |
 
 ## Repository layout
 
 ```
-front_row/
+YapLab/
 ├── .env.example                 # every backend setting, with defaults
 ├── .kiro/specs/                 # requirements, design, and tasks per feature
+├── infra/                       # GCP VM deployment scripts (HTTPS via Caddy)
+├── video/                       # Remotion project for the demo video intro and README banner
 ├── docs/
+│   ├── assets/                  # logo and README banner
 │   ├── backend-interface.md     # REST/WebSocket protocol, events, speech interfaces
+│   ├── demo-video-script.md     # 3-minute video: purpose, design, demo
 │   └── voice-verification.md    # real-provider voice checks
 ├── packages/protocol/schema.json  # JSON schema for wire messages (generated)
 ├── scenarios/sample_talk.json   # scripted talk for verify, replay, and the fake client
@@ -236,15 +256,29 @@ See `.env.example` for the rest.
 
 After changing `frontrow/protocol.py`, regenerate the schema with `uv run python -m frontrow.protocol > ../../packages/protocol/schema.json`.
 
+## Deploy
+
+The API and the frontend run on one small GCP VM with a static IP. Caddy serves both from one HTTPS URL, with a free `<ip>.sslip.io` hostname unless you set your own domain:
+
+```bash
+cp infra/deploy.env.example infra/deploy.env   # set PROJECT_ID
+infra/gcp/create-vm.sh                          # static IP, firewall, VM; prints the URL
+infra/gcp/deploy.sh                             # builds and ships API + frontend
+```
+
+See [infra/README.md](infra/README.md) for the full walkthrough.
+
 ## Further reading
 
 - [Backend interface](docs/backend-interface.md): REST, WebSocket messages, event catalog, speech engines
 - [Live bridge guide](frontend/src/live/README.md): how the Teaching room talks to the backend
 - [Voice verification](docs/voice-verification.md): real ElevenLabs checks
+- [Deployment guide](infra/README.md): GCP VM, HTTPS, everyday commands
+- [Demo video](video/README.md): Remotion intro and how to append the demo recording
 - [Feature specs](.kiro/specs/): requirements, design, and tasks per feature
 
 ## Tech
 
-Python, FastAPI, asyncio, Pydantic, DeepSeek V4 or Claude for listeners (OpenAI also supported), ElevenLabs Scribe and TTS, React, Vite, pdf.js.
+Python, FastAPI, asyncio, Pydantic, DeepSeek V4 or Claude for listeners (OpenAI also supported), ElevenLabs Scribe and TTS, React, Vite, pdf.js, Caddy on Google Cloud, Remotion.
 
 ## Team
