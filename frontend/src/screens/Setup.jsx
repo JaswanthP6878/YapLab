@@ -102,7 +102,7 @@ function ContentSection({ config, set }) {
       <section className="panel">
         <h2 className="panel-h">Your startup</h2>
         <div className="field-row">
-          <Field id="startup" label="Startup name"><input id="startup" value={config.startup} onChange={(e) => set({ startup: e.target.value })} placeholder="Front Row" /></Field>
+          <Field id="startup" label="Startup name"><input id="startup" value={config.startup} onChange={(e) => set({ startup: e.target.value })} placeholder="YapLab" /></Field>
           <div className="field">
             <span>Stage</span>
             <Segmented name="Stage" value={config.stage} onChange={(v) => set({ stage: v })} options={['Pre-seed', 'Seed', 'Series A'].map((s) => ({ value: s, label: s }))} />

@@ -21,7 +21,7 @@ function LiveHarness() {
   };
   const ready = ['presenting', 'qa'].includes(live.status);
   return <main style={{ fontFamily: 'system-ui', maxWidth: 1100, margin: '24px auto', padding: 20, lineHeight: 1.5 }}>
-    <h1>FrontRow live bridge test bench</h1>
+    <h1>YapLab live bridge test bench</h1>
     <p>API: {API_URL || '(set VITE_API_URL)'} · <strong data-testid="phase">{live.status}</strong> · socket {live.connectionState} · mic {live.speech.status}</p>
     <p>Session: <code>{live.sessionId || 'not started'}</code>. Use headphones for voice checks. Camera stays off.</p>
     <p>Students speak after <strong>Call on</strong> during your talk, or <strong>Next question</strong> in Q&A. Background sounds are separate from student voices.</p>

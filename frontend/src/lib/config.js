@@ -22,7 +22,7 @@ export function defaultConfig(modeId = 'teaching', variantId, roster = PERSONAS,
     topic: 'Backpropagation, explained',
     slides: null, // uploaded deck (teaching, pitch): { kind: 'pdf', name, url } | { kind: 'images', name, urls }
     // pitch
-    startup: 'Front Row',
+    startup: 'YapLab',
     oneLiner: 'An AI audience to rehearse teaching, pitches and interviews.',
     stage: 'Pre-seed',
     // interview

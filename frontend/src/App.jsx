@@ -62,7 +62,7 @@ export default function App() {
           <div className="topbar-in">
             <button className="brand" onClick={() => go('home')}>
               <Logo />
-              <span>Front Row</span>
+              <span>YapLab</span>
             </button>
             <nav className="nav">
               {nav.map((n) => (

@@ -38,3 +38,8 @@
 - [ ] 7. Interview mode practice
   - Replace the coming-soon screen with a working interview session
   - _Requirements: 1.3_
+
+- [x] 8. Rename the product to YapLab in the UI
+  - Tab titles (`index.html`, `live-test.html`), header chip, home hero, copy and footer, sample pitch deck, Pitch startup default and placeholder, test bench heading
+  - Code, packages, `FRONTROW_*` settings, and docs unchanged
+  - _Requirements: 7.1, 7.2, 7.3, 7.4_

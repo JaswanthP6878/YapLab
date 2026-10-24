@@ -280,7 +280,7 @@ export const DECKS = {
     ],
   },
   pitch: {
-    title: 'Front Row: seed pitch',
+    title: 'YapLab: seed pitch',
     segments: [
       {
         title: 'Nobody has a room to teach to', points: ['"Teach it to learn it" works', 'Study groups flake', 'Mirrors don\'t ask questions'],
@@ -294,7 +294,7 @@ export const DECKS = {
       },
       {
         title: 'An audience of AI agents', points: ['Voices and personalities', 'They interrupt and get confused', 'Feedback on what landed'],
-        lines: [L('Front Row gives you an audience of AI agents with voices and personalities.', 'solution'),
+        lines: [L('YapLab gives you an audience of AI agents with voices and personalities.', 'solution'),
           L('They listen, interrupt, get confused and ask follow-ups, so, like, it feels like the real room.', 'solution'),
           L('Afterwards you see your pace, your filler words, and what each listener understood.', 'solution')],
         events: [

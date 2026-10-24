@@ -2,11 +2,13 @@
 
 ## Introduction
 
-This document specifies the FrontRow web app in `frontend/`: a React + Vite single-page application where a presenter picks a practice mode, configures an AI audience, presents in a distraction-free virtual room, and reviews a detailed report. Without a backend URL the app runs a scripted, in-browser simulation of the audience (demo mode), so the full experience can be shown and developed independently of the backend. Live backend sessions for Teaching are specified separately in the `live-teaching-bridge` spec.
+This document specifies the web app in `frontend/`, presented to users as YapLab (the repository, packages, and code keep the FrontRow name): a React + Vite single-page application where a presenter picks a practice mode, configures an AI audience, presents in a distraction-free virtual room, and reviews a detailed report. Without a backend URL the app runs a scripted, in-browser simulation of the audience (demo mode), so the full experience can be shown and developed independently of the backend. Live backend sessions for Teaching are specified separately in the `live-teaching-bridge` spec.
 
 ## Glossary
 
 - **App**: The React application in `frontend/`.
+- **Product_Name**: "YapLab", the name shown to users.
+- **Test_Bench**: The developer page `/live-test.html`.
 - **Mode**: A practice type: Teaching, Pitch, or Interview.
 - **Variant**: A preset within a Mode (for example Study group, Lecture rehearsal, Conference talk) with an audience, seriousness, deck, and optional time limit.
 - **Persona**: An audience member with a name, role (student, judge, interviewer), trait, avatar look, and voice settings.
@@ -81,3 +83,14 @@ This document specifies the FrontRow web app in `frontend/`: a React + Vite sing
 
 1. THE App SHALL install with `npm ci` and run with `npm run dev` and `npm run build` from `frontend/`.
 2. THE repository SHALL ignore `node_modules/` and `dist/` and SHALL NOT track generated build output.
+
+### Requirement 7: Product Name
+
+**User Story:** As a presenter, I want the app to show one consistent name, so that the product feels finished.
+
+#### Acceptance Criteria
+
+1. THE App SHALL show the Product_Name in the browser tab title, the header, the home screen copy, and the footer.
+2. THE App SHALL use the Product_Name in user-facing demo content, including the sample pitch deck and the default startup name in Pitch setup.
+3. THE Test_Bench page SHALL show the Product_Name in its title and heading.
+4. THE App SHALL keep the FrontRow name in code identifiers, package names, environment variables, and developer documentation.

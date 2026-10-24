@@ -21,7 +21,7 @@ function HeroRoom({ roster }) {
   }, []);
   const b = HERO_BEATS[beat];
   return (
-    <div className="hero-room" aria-label="Animated preview of a Front Row classroom">
+    <div className="hero-room" aria-label="Animated preview of a YapLab classroom">
       <div className="hero-board">
         <span className="chalk-label">Slide 3 / 5 · simulated preview</span>
         <h3>The chain rule as gears</h3>
@@ -100,7 +100,7 @@ export default function Home({ onStart, onSample, roster }) {
           <p className="eyebrow">Your first audience, before the real one</p>
           <h1>Rehearse in front of a room that <em>talks back.</em></h1>
           <p className="lede">
-            Front Row puts you in front of AI agents with voices and personalities. Teach a class, pitch investors,
+            YapLab puts you in front of AI agents with voices and personalities. Teach a class, pitch investors,
             or face a hiring panel. They react to what you actually say, and tell you what landed.
           </p>
           <div className="hero-modes">
@@ -175,7 +175,7 @@ export default function Home({ onStart, onSample, roster }) {
 
       <section className="wrap section listen">
         <div className="section-head">
-          <h2>What Front Row listens for</h2>
+          <h2>What YapLab listens for</h2>
         </div>
         <div className="listen-grid">
           {[
@@ -198,7 +198,7 @@ export default function Home({ onStart, onSample, roster }) {
       </section>
 
       <footer className="footer wrap">
-        <span>Front Row · Hackachusetts 2026 × BU DS+X</span>
+        <span>YapLab · Hackachusetts 2026 × BU DS+X</span>
         <a className="link" href="#modes">Back to modes</a>
       </footer>
     </main>
