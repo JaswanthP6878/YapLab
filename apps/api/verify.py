@@ -40,6 +40,7 @@ from frontrow.moderator import Moderator
 from frontrow.orchestrator import Orchestrator
 from frontrow.personas import build_room
 from frontrow.transcript import TranscriptBuffer
+from verify_natural_hands import NATURAL_HAND_CHECKS
 from verify_voice_integration import VOICE_CHECKS
 
 SCENARIO_PATH = (
@@ -87,7 +88,8 @@ def build_orchestrator(
     events: list | None = None,
 ) -> Orchestrator:
     buf, slides = scenario_buffer_and_slides()
-    cfg = config or Config()
+    # These fixtures isolate orchestration; natural warm-up has its own checks.
+    cfg = config or Config(moderator_warmup_seconds=0, moderator_warmup_min_words=0)
     fake = llm or FakeLLM()
     listeners = [
         Listener(lid, persona, fake) for lid, persona in build_room(preset)
@@ -251,7 +253,7 @@ def check_agent_drops_fabricated_question() -> None:
 
 
 def check_moderator() -> None:
-    cfg = Config()
+    cfg = Config(moderator_warmup_seconds=0, moderator_warmup_min_words=0)
     clock = SimulatedClock()
     mod = Moderator(cfg, clock)
 
@@ -499,7 +501,7 @@ def check_fallback_llm() -> None:
 
 
 def check_moderator_numeric_id_order() -> None:
-    mod = Moderator(Config(), SimulatedClock())
+    mod = Moderator(Config(moderator_warmup_seconds=0, moderator_warmup_min_words=0), SimulatedClock())
     q = GroundedQuestion(question="q", quote="some real quote", source="transcript")
     interruption, _ = mod.process_tick(
         [HandRaise(listener_id="L10", question=q), HandRaise(listener_id="L2", question=q)],
@@ -541,7 +543,8 @@ def _replay_sample():
     from frontrow.replay import load_scenario, replay
 
     return asyncio.run(
-        replay(load_scenario(SCENARIO_PATH), llm=FakeLLM(), config=Config())
+        replay(load_scenario(SCENARIO_PATH), llm=FakeLLM(),
+               config=Config(moderator_warmup_seconds=0, moderator_warmup_min_words=0))
     )
 
 
@@ -590,7 +593,8 @@ def _hand(lid: str, qid: str, confusion: float = 0.0, quote: str = "some real qu
 
 
 def check_moderator_hand_lifecycle() -> None:
-    cfg = Config(moderator_min_interruption_gap_seconds=60.0, hand_raise_timeout_seconds=45.0)
+    cfg = Config(moderator_min_interruption_gap_seconds=60.0, hand_raise_timeout_seconds=45.0,
+                 moderator_warmup_seconds=0, moderator_warmup_min_words=0)
     mod = Moderator(cfg, SimulatedClock())
 
     # most confused listener's hand goes up; the rest are pooled
@@ -631,7 +635,7 @@ def check_moderator_hand_lifecycle() -> None:
 
 
 def check_moderator_qa_ranking() -> None:
-    cfg = Config(qa_max_questions=3)
+    cfg = Config(qa_max_questions=3, moderator_warmup_seconds=0, moderator_warmup_min_words=0)
     mod = Moderator(cfg, SimulatedClock())
     mod.process_tick(
         [_hand("L0", "q1", 90), _hand("L0", "q2", 80, quote="second quote here"),
@@ -731,7 +735,8 @@ def check_session_take_answer_and_follow_up() -> None:
     async def run() -> None:
         clock = SimulatedClock()
         _, slides = scenario_buffer_and_slides()
-        session = Session(config=Config(), clock=clock, llm=Scripted(), slides=slides)
+        session = Session(config=Config(moderator_warmup_seconds=0, moderator_warmup_min_words=0),
+                          clock=clock, llm=Scripted(), slides=slides)
         session.change_slide(1)
         session.start()
         await asyncio.sleep(0)  # let the tick loop register its first sleep
@@ -844,7 +849,8 @@ async def _room_session(llm: FakeLLM):
     from frontrow.session import Session
 
     clock = SimulatedClock()
-    session = Session(config=Config(), clock=clock, llm=llm)
+    session = Session(config=Config(moderator_warmup_seconds=0, moderator_warmup_min_words=0),
+                      clock=clock, llm=llm)
     session.start()
     await asyncio.sleep(0)
 
@@ -956,7 +962,8 @@ def check_server_end_to_end() -> None:
 
     signal.alarm(60)  # never hang the verifier if the socket loop breaks
     try:
-        app = create_app(config=Config(), llm_factory=FakeLLM, tts=StubTTS(), stt_tokens=StubSTT())
+        app = create_app(config=Config(moderator_warmup_seconds=0, moderator_warmup_min_words=0),
+                         llm_factory=FakeLLM, tts=StubTTS(), stt_tokens=StubSTT())
         with TestClient(app) as client:
             assert client.get("/health").json()["ok"] is True
             data = load_scenario()
@@ -1084,6 +1091,7 @@ CHECKS = [
 ]
 
 
+CHECKS.extend(NATURAL_HAND_CHECKS)
 CHECKS.extend(VOICE_CHECKS)
 
 

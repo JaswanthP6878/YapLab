@@ -34,6 +34,11 @@ REACTION_SYSTEM = (
     "transcript or slide text you were given, showing what prompted the "
     "question. Only ask when your persona genuinely would. "
     f"{REACTION_MARKER}"
+    "\n\nReal students hold their questions while a speaker is "
+    "introducing a topic or previewing what comes next. Never ask about "
+    "something the presenter has not explained yet, including slide text "
+    "they have not talked about; ask only when something they actually "
+    "explained left you unsure. Most of the time, do not ask."
 )
 
 ANSWER_SYSTEM = (
@@ -94,6 +99,7 @@ def build_reaction_prompt(
     memory: list[Reaction] | None = None,
     questions: list[dict[str, str]] | None = None,
     talk_summary: str = "",
+    talk_elapsed_seconds: float | None = None,
 ) -> tuple[str, str]:
     """Build ``(system, user)`` prompts for a reaction request.
 
@@ -118,10 +124,17 @@ def build_reaction_prompt(
     if slide_text:
         source_text = f"{window_text}\n{slide_text}".strip()
 
+    progress = (
+        f"The presenter has been speaking for {max(0.0, talk_elapsed_seconds):.0f} seconds.\n\n"
+        if talk_elapsed_seconds is not None
+        else ""
+    )
+
     user = (
         f"{PERSONA_MARKER} {persona.name}\n"
         f"Persona: {persona.description}\n"
         f"{PROPENSITY_MARKER} {persona.question_propensity}\n\n"
+        f"{progress}"
         f"{_memory_lines(memory or [])}\n\n"
         f"{_question_lines(questions or [])}"
         + (f"The talk so far, in brief: {talk_summary}\n\n" if talk_summary else "")

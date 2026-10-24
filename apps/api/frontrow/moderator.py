@@ -47,6 +47,40 @@ class Moderator:
         self._raised_at = 0.0
         self._times_called: dict[str, int] = {}
         self._qa_asked = 0
+        self._talk_started_at: float | None = None
+
+    def start(self, now: float) -> None:
+        """Anchor warm-up to the actual talk start, not room creation."""
+        self._talk_started_at = now
+
+    def _warming_up(self, now: float, total_word_count: int) -> bool:
+        seconds = self._config.moderator_warmup_seconds
+        if seconds > 0 and (
+            self._talk_started_at is None or now - self._talk_started_at < seconds
+        ):
+            return True
+        return total_word_count < self._config.moderator_warmup_min_words
+
+    def _pool(self, hand: HandRaise) -> None:
+        """Keep the newest two held questions per listener, across pool entry paths."""
+        held = [h for h in self._qa_pool if h.listener_id == hand.listener_id]
+        if len(held) >= 2:
+            self._qa_pool.remove(held[0])
+        self._qa_pool.append(hand)
+
+    def _pool_tick(self, candidates: list[HandRaise]) -> list[HandRaise]:
+        """Pool at most the highest-confusion candidate per listener this tick."""
+        best: dict[str, HandRaise] = {}
+        for hand in candidates:
+            if self._is_duplicate(hand):
+                continue
+            previous = best.get(hand.listener_id)
+            if previous is None or hand.confusion > previous.confusion:
+                best[hand.listener_id] = hand
+        pooled = list(best.values())
+        for hand in pooled:
+            self._pool(hand)
+        return pooled
 
     @property
     def qa_pool(self) -> list[HandRaise]:
@@ -103,29 +137,34 @@ class Moderator:
     # --- presenting -------------------------------------------------------
 
     def process_tick(
-        self, handraises: list[HandRaise], now: float
+        self, handraises: list[HandRaise], now: float, *, total_word_count: int = 0
     ) -> tuple[HandRaise | None, list[HandRaise]]:
         """Process one tick's hand raises.
 
         Returns ``(raised, pooled_this_tick)``. ``raised`` is the hand that
         goes up and waits for the presenter; it is ``None`` when a hand is
-        already up or being answered, or the rate limit is in effect. Repeats
-        of a question the same listener already has held are dropped.
+        already up or being answered, or the rate limit is in effect. During
+        warm-up every candidate is dropped, rather than saved for Q&A. Only
+        speech-grounded questions may interrupt; slide questions are pooled.
+        Repeats of a question the same listener already has held are dropped.
         """
+        if self._warming_up(now, total_word_count):
+            return None, []
         fresh = [h for h in handraises if not self._is_duplicate(h)]
         if not fresh:
             return None, []
 
         if self._active is not None or self._rate_limited(now):
-            self._qa_pool.extend(fresh)
-            return None, list(fresh)
+            return None, self._pool_tick(fresh)
 
-        raised = self._select(fresh)
+        spoken = [h for h in fresh if h.question.source in ("transcript", "answer")]
+        if not spoken:
+            return None, self._pool_tick(fresh)
+        raised = self._select(spoken)
         self._active = raised
         self._active_taken = False
         self._raised_at = now
-        pooled = [h for h in fresh if h is not raised]
-        self._qa_pool.extend(pooled)
+        pooled = self._pool_tick([h for h in fresh if h is not raised])
         return raised, pooled
 
     def expire(self, now: float) -> HandRaise | None:
@@ -145,7 +184,7 @@ class Moderator:
             return None
         hand = self._active
         self._active = None
-        self._qa_pool.append(hand)
+        self._pool(hand)
         return hand
 
     def take(self, question_id: str, now: float) -> HandRaise | None:
@@ -166,8 +205,10 @@ class Moderator:
             raise ValueError(
                 f"question {self._active.question_id} is still being answered"
             )
-        self.lower()
+        # Reserve the selected question before lowering: a full listener pool
+        # could otherwise evict this very question before remove(match).
         self._qa_pool.remove(match)
+        self.lower()
         self._mark_called(match, now)
         return match
 
@@ -187,12 +228,12 @@ class Moderator:
         to the answer just given, so the rate limit does not apply), otherwise
         it joins the Q&A pool.
         """
-        if self._active is None:
+        if self._active is None and hand.question.source in ("transcript", "answer"):
             self._active = hand
             self._active_taken = False
             self._raised_at = now
             return True
-        self._qa_pool.append(hand)
+        self._pool(hand)
         return False
 
     # --- Q&A phase --------------------------------------------------------
