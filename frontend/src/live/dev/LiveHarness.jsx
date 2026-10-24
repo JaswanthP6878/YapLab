@@ -25,7 +25,7 @@ function LiveHarness() {
     <p>API: {API_URL || '(set VITE_API_URL)'} · <strong data-testid="phase">{live.status}</strong> · socket {live.connectionState} · mic {live.speech.status}</p>
     <p>Session: <code>{live.sessionId || 'not started'}</code>. Use headphones for voice checks. Camera stays off.</p>
     <p>Students speak after <strong>Call on</strong> during your talk, or <strong>Next question</strong> in Q&A. Background sounds are separate from student voices.</p>
-    <label><input type="checkbox" checked={ambience} onChange={(event) => setAmbience(event.target.checked)} /> Room ambience (creaks, yawns, whispers)</label>
+    <label><input type="checkbox" checked={ambience} onChange={(event) => setAmbience(event.target.checked)} /> Room tone</label>
     <p role="status">Student audio: {live.audioBlocked ? 'blocked — click Enable audio' : live.questionPlayback?.status || 'waiting for you to call on a question'}{live.speech.muted ? ' · microphone muted for playback' : ''}</p>
     {!started && <button onClick={() => setStarted(true)}>Start session</button>}
     {started && !live.report && <>

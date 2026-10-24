@@ -77,3 +77,8 @@
     - _Requirements: 8.3_
   - [x] 13.5 Scribe language and secondary languages from token metadata, English defaults; backend token sets `language_code: en`
     - _Requirements: 4.1_
+
+- [x] 14. Remove random room noises
+  - Drop the event-driven effects and their throttle policy from `ambience.js`; keep only the ducked room tone
+  - Bench checkbox renamed to Room tone; ambience tests cover the loop only
+  - _Requirements: 9.1, 9.3_

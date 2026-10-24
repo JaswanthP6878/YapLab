@@ -7,24 +7,15 @@ for (const [baseUrl, expectedPrefix] of [
   ['/courses/frontrow', '/courses/frontrow/sfx/'],
   ['./', './sfx/'],
 ]) {
-  test(`ambience loop and effects preserve the deployment base ${baseUrl}`, () => {
+  test(`the room tone preserves the deployment base ${baseUrl}`, () => {
     const urls = [];
-    let now = 0;
-    const ambience = createAmbience({ baseUrl, now: () => now, random: () => 0,
+    const ambience = createAmbience({ baseUrl,
       createAudio: (url) => {
         urls.push(url);
         return { play: () => Promise.resolve(), pause() {}, removeAttribute() {}, load() {} };
       } });
     ambience.start();
-    ambience.handleEvent({ event: 'reaction', data: { listener: 'L0', attention: 20 } });
-    now = 5000;
-    ambience.handleEvent({ event: 'tick_complete', data: { room: { attention: 30 } } });
-    now = 10000;
-    ambience.handleEvent({ event: 'hand_raised', data: {} });
-    assert.deepEqual(urls, [
-      `${expectedPrefix}room_tone_classroom.mp3`, `${expectedPrefix}pen_click.mp3`,
-      `${expectedPrefix}whisper_chatter.mp3`, `${expectedPrefix}chair_creak.mp3`,
-    ]);
+    assert.deepEqual(urls, [`${expectedPrefix}room_tone_classroom.mp3`]);
     ambience.dispose();
   });
 }

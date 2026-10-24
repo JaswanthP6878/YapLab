@@ -51,7 +51,7 @@ sequenceDiagram
 | `mapEvents.js` | Listener_Map, persona mapping, events → avatar actions, meters, gauge |
 | `sessionState.js` | Hand reducer, transcript sequence from replay, phase from `hello`, demo deck → slide text |
 | `questionAudio.js` | FIFO playback, backend audio cache, playback messages, browser speech fallback, mic muting |
-| `ambience.js` | Room tone and throttled effects with `BASE_URL` sound paths |
+| `ambience.js` | Quiet looping room tone, ducked during question audio, with `BASE_URL` sound paths; no event-driven effects |
 | `liveConfig.js` | Live config with the fixed five-avatar audience |
 | `LiveControls.jsx`, `LiveReport.jsx` | Live controls (call on, done answering, end talk, next question, finish), idle readiness message, Q&A count capped at five, six-second verdict line, and the backend report view |
 | `dev/LiveHarness.jsx`, `live-test.html` | Test_Bench with opt-in logs and typed transcripts |
@@ -76,4 +76,4 @@ Hands keyed by question id with status (`raised`, `taken`, `answered`, ...); the
 
 ## Testing Strategy
 
-`npm run test:live` (Node test runner, 71 tests): transport correlation and replay, persona mapping, live reducer state, Scribe sequence, duration and mute filtering, token-driven language options with English defaults, audio FIFO and fallback lifetime, ambience throttles and prefixed URLs, hook state helpers including raised-hand preservation and source-scoped errors, and the talk lifecycle (idle connect and reconnect, deduplicated start, typed seq 0 after the start ack, idle and pending-start cleanup, retry after a rejected start). Manual checks with the Test_Bench and the product UI against a running backend cover microphone capture and audible voice quality.
+`npm run test:live` (Node test runner, 70 tests): transport correlation and replay, persona mapping, live reducer state, Scribe sequence, duration and mute filtering, token-driven language options with English defaults, audio FIFO and fallback lifetime, room tone loop, ducking, and prefixed URLs, hook state helpers including raised-hand preservation and source-scoped errors, and the talk lifecycle (idle connect and reconnect, deduplicated start, typed seq 0 after the start ack, idle and pending-start cleanup, retry after a rejected start). Manual checks with the Test_Bench and the product UI against a running backend cover microphone capture and audible voice quality.

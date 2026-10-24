@@ -56,7 +56,7 @@ the pool; Finish retrieves the backend report. Back to setup → Last report
 reopens that same live report.
 
 The browser can require an Enable audio click after an autoplay rejection.
-Room ambience starts off in the bench and has its own checkbox. Student voices
+The quiet room tone starts off in the bench and has its own checkbox; room events never trigger sound effects. Student voices
 play after Call on / Next question. Sounds follow Vite's `BASE_URL`, including
 deployments under a URL prefix.
 
@@ -130,5 +130,5 @@ npm run build
 
 Tests cover transport correlation/replay, persona mapping, live reducer state,
 Scribe sequence/duration and mute filtering, audio FIFO/fallback lifetime,
-ambience throttles, and prefixed sound URLs. Microphone capture and audible
+the room tone loop, and prefixed sound URLs. Microphone capture and audible
 voice quality still require a browser check.

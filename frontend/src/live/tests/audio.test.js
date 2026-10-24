@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createQuestionAudio } from '../questionAudio.js';
-import { createAmbience, createAmbiencePolicy } from '../ambience.js';
+import { createAmbience } from '../ambience.js';
 
 const flush = async () => { for (let i = 0; i < 25; i += 1) await Promise.resolve(); };
 const deferred = () => { let resolve; const promise = new Promise((yes) => { resolve = yes; }); return { promise, resolve }; };
@@ -309,32 +309,9 @@ test('disabled voices complete the question without audio, browser fallback, or 
   h.queue.dispose();
 });
 
-test('ambience applies per-listener twenty-second and per-room five-second throttles', () => {
-  let now = 0;
-  const policy = createAmbiencePolicy({ now: () => now, random: () => 0 });
-  const reaction = (listener) => event('reaction', { listener, attention: 20 });
-  assert.equal(policy.next(reaction('L0')).name, 'pen_click');
-  now = 4999;
-  assert.equal(policy.next(reaction('L1')), null);
-  now = 5000;
-  assert.equal(policy.next(reaction('L1')).name, 'pen_click');
-  now = 10000;
-  assert.equal(policy.next(reaction('L0')), null);
-  now = 20000;
-  assert.equal(policy.next(reaction('L0')).name, 'pen_click');
-  now = 25000;
-  assert.equal(policy.next(event('tick_complete', { room: { attention: 39 } })).name, 'whisper_chatter');
-  now = 30000;
-  assert.equal(policy.next(event('hand_raised', {})).name, 'chair_creak');
-  now = 35000;
-  assert.equal(policy.next(event('reaction', { listener: 'L2', attention: 35 })), null);
-  assert.equal(policy.next(event('tick_complete', { room: { attention: null } })), null);
-});
-
-test('room loop and active SFX duck for questions; blocked loop recovers and dispose stops everything', async () => {
+test('room loop ducks for questions; blocked loop recovers and dispose stops it', async () => {
   const audio = [];
-  let now = 0;
-  const ambience = createAmbience({ now: () => now, random: () => 0, createAudio: (url) => {
+  const ambience = createAmbience({ createAudio: (url) => {
     const item = new FakeAudio(url);
     if (audio.length === 0) item.blockNext = true;
     audio.push(item);
@@ -346,19 +323,13 @@ test('room loop and active SFX duck for questions; blocked loop recovers and dis
   assert.equal(audio[0].volume, 0.035);
   ambience.resume();
   assert.equal(audio[0].playCalls, 2);
-  ambience.handleEvent(event('reaction', { listener: 'L0', attention: 20 }));
-  assert.equal(audio.length, 2);
-  const effectVolume = audio[1].volume;
   ambience.setDucked(true);
   assert.ok(audio[0].volume < 0.01);
-  assert.ok(audio[1].volume < effectVolume);
-  now = 20000;
-  ambience.handleEvent(event('reaction', { listener: 'L0', attention: 20 }));
-  assert.equal(audio.length, 2, 'new sounds stay quiet while a question plays');
   ambience.setDucked(false);
-  assert.equal(audio[1].volume, effectVolume);
+  assert.equal(audio[0].volume, 0.035);
+  assert.equal(ambience.handleEvent, undefined, 'room events never trigger sound effects');
   ambience.dispose();
   assert.ok(audio.every((item) => item.paused));
   ambience.start();
-  assert.equal(audio.length, 2);
+  assert.equal(audio.length, 1);
 });

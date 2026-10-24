@@ -112,12 +112,13 @@ This document specifies the bridge that connects the web app's Teaching room to 
 
 ### Requirement 9: Ambience
 
-**User Story:** As a presenter, I want subtle classroom sounds, so that the room feels alive.
+**User Story:** As a presenter, I want a subtle classroom atmosphere without random noises, so that the room feels alive but never distracts me mid-sentence.
 
 #### Acceptance Criteria
 
-1. WHERE ambient noise and voices are on, THE Bridge SHALL loop quiet room tone and play throttled effects (coughs, rustles, chair creaks) tied to room events.
+1. WHERE ambient noise and voices are on, THE Bridge SHALL loop a quiet room tone and lower it while question audio plays.
 2. THE Bridge SHALL build sound URLs from the app's base URL so that sounds work when deployed under a path prefix.
+3. THE Bridge SHALL NOT play sound effects (pen clicks, yawns, rustles, phone buzzes, whispers, chair creaks) in response to reactions, room gauges, or raised hands.
 
 ### Requirement 10: Diagnostics and Testing
 

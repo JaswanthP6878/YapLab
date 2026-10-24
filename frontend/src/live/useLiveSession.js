@@ -142,7 +142,6 @@ export function useLiveSession({ config, onAgentEvent, onTranscript, enabled = t
       // A replay rebuilds visible state but must not repeat old question speech/transcripts.
       if (mapped && envelope.replay && ['speaking', 'nodding'].includes(mapped.action)) mapped = { ...mapped, action: 'listening', text: undefined };
       emit(mapped);
-      if (!envelope.replay) run.ambience.handleEvent(envelope);
     }
 
     async function initialize() {
