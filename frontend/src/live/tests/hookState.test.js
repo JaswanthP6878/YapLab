@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyHandEvent, createDebugHistory, createSlideSync } from '../hookState.js';
+import { applyHandEvent, createDebugHistory, createSlideSync, createSessionErrors, preserveRaisedHand } from '../hookState.js';
 
 test('product diagnostics retain bounded histories without publishing state until opted in', () => {
   const eventSnapshots = [];
@@ -99,4 +99,35 @@ test('failed or late slide acknowledgements never roll local navigation back', a
   fail = false;
   await slides.synchronize();
   assert.deepEqual(requests, [1, 2, 3, 3]);
+});
+
+
+test("pooling a different question never hides this listener's raised hand", () => {
+  const raised = { type: 'event', event: 'hand_raised', t: 1,
+    data: { question_id: 'q1', listener: 'L0', persona: 'confused first-year', question: 'Define a quorum?' } };
+  let hands = applyHandEvent({}, raised, () => {});
+  const pooled = { type: 'event', event: 'pooled', t: 2,
+    data: { question_id: 'q2', listener: 'L0', persona: 'confused first-year', question: 'Another question' } };
+  hands = applyHandEvent(hands, pooled, () => {});
+  assert.deepEqual(preserveRaisedHand({ agentId: 'alex', action: 'listening', timestamp: 2000 }, pooled, hands),
+    { agentId: 'alex', action: 'raise_hand', text: 'Define a quorum?', timestamp: 2000 });
+  const lowered = { ...pooled, event: 'hand_lowered', data: { ...pooled.data, question_id: 'q1' } };
+  assert.equal(preserveRaisedHand({ agentId: 'alex', action: 'listening' }, lowered, hands).action, 'listening');
+  const taken = { ...lowered, event: 'question_taken' };
+  assert.equal(preserveRaisedHand({ agentId: 'alex', action: 'speaking' }, taken, hands).action, 'speaking');
+  assert.equal(preserveRaisedHand({ agentId: 'maya', action: 'nodding' }, { ...pooled, data: { listener: 'L1' } }, hands).action, 'nodding');
+});
+
+test('slide navigation clears only a slide-sync error, preserving speech and session failures', () => {
+  const changes = [];
+  const errors = createSessionErrors((message) => changes.push(message));
+  errors.show('Microphone permission denied', 'speech');
+  errors.clear('slide');
+  assert.deepEqual(changes, ['Microphone permission denied']);
+  errors.show('The slide could not sync', 'slide');
+  errors.clear('slide');
+  assert.deepEqual(changes.slice(-2), ['The slide could not sync', null]);
+  errors.show('Session is no longer available');
+  errors.clear('slide');
+  assert.equal(changes.at(-1), 'Session is no longer available');
 });

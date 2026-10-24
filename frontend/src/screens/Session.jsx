@@ -100,8 +100,8 @@ export default function Session({ config: initialConfig, onExit, onEnd, onAgentE
   useEffect(() => {
     if (!liveMode || !live.report || reportedLiveReport.current === live.report) return;
     reportedLiveReport.current = live.report;
-    onEnd({ kind: 'live', report: live.report, config: { ...config, voices } });
-  }, [liveMode, live.report, config, voices, onEnd]);
+    onEnd({ kind: 'live', report: live.report, config: { ...initialConfig, voices } });
+  }, [liveMode, live.report, initialConfig, voices, onEnd]);
 
   // Uploaded decks are paged by you; the demo deck follows the scripted presenter.
   const upCount = usePageCount(config.slides);

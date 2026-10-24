@@ -5,7 +5,7 @@ import { createAmbience } from './ambience.js';
 import { createQuestionAudio } from './questionAudio.js';
 import { agentIdFor, buildListenerMap, eventMetadata, listenerMetadata, mapAgentEvent, mapListenerMeters, mapRoomGauge } from './mapEvents.js';
 import { demoDeckSlides } from './sessionState.js';
-import { applyHandEvent, createDebugHistory, createSlideSync } from './hookState.js';
+import { applyHandEvent, createDebugHistory, createSlideSync, createSessionErrors, preserveRaisedHand } from './hookState.js';
 import { useScribeSpeech } from './useScribeSpeech.js';
 
 /**
@@ -30,6 +30,9 @@ export function useLiveSession({ config, onAgentEvent, onTranscript, enabled = t
   const [transcriptAcks, setTranscriptAcks] = useState([]);
   const [error, setError] = useState(null);
   const [report, setReport] = useState(null);
+  const [latestVerdict, setLatestVerdict] = useState(null);
+  const errors = useRef(null);
+  if (!errors.current) errors.current = createSessionErrors(setError);
   const diagnostics = useRef(null);
   if (!diagnostics.current) diagnostics.current = createDebugHistory({ onEvents: setEvents, onAcks: setTranscriptAcks });
   const latest = useRef({});
@@ -39,7 +42,7 @@ export function useLiveSession({ config, onAgentEvent, onTranscript, enabled = t
   const speech = useScribeSpeech((text) => latest.current.onTranscript?.(text), {
     sessionId, connection, connectionState, enabled,
     onAck: (ack) => diagnostics.current.addAck(ack),
-    onError: (message) => setError(message),
+    onError: (message) => errors.current.show(message, 'speech'),
   });
   speechRef.current = speech;
 
@@ -60,7 +63,7 @@ export function useLiveSession({ config, onAgentEvent, onTranscript, enabled = t
       audio: null, ambience: null, unsubscribers: [], maxSequence: -1, floorId: null, speakingListener: null, starting: null,
       transportConnected: false, connectedOnce: false, transportVersion: 0, slideSync: null };
     runtime.current = run;
-    const fail = (value) => { if (run.alive) setError(value?.message || String(value)); };
+    const fail = (value) => { if (run.alive) errors.current.show(value); };
     const changePhase = (value) => { run.phase = value; if (run.alive) setPhase(value); };
     const publishHands = (handMap) => setHands(Object.values(handMap).map((hand) => ({ ...hand,
       agentId: agentIdFor(hand.listener, hand.persona, run.listenerMap) })));
@@ -74,7 +77,7 @@ export function useLiveSession({ config, onAgentEvent, onTranscript, enabled = t
     run.slideSync = createSlideSync({
       canSend: () => run.alive && run.transportConnected && ['idle', 'presenting', 'qa'].includes(run.phase),
       request: (type, fields) => run.socket.request(type, fields),
-      onError: fail,
+      onError: (problem) => { if (run.alive) errors.current.show(problem, 'slide'); },
     });
     run.ambience = createAmbience();
     run.audio = createQuestionAudio({ request, apiBase: API_URL, speak, stopSpeaking,
@@ -92,7 +95,7 @@ export function useLiveSession({ config, onAgentEvent, onTranscript, enabled = t
     run.audio.enableVoices(latest.current.config.voices !== false);
     if (latest.current.config.noise && latest.current.config.voices !== false) run.ambience.start();
     diagnostics.current.clear();
-    setError(null); setReport(null); setHands([]); setAgents({}); setRoom(null); setActiveQuestion(null);
+    errors.current.clear(); setLatestVerdict(null); setReport(null); setHands([]); setAgents({}); setRoom(null); setActiveQuestion(null);
     setQuestionPlayback(null); setPhase('connecting'); setConnectionState('connecting');
 
     function handleEvent(envelope) {
@@ -107,6 +110,9 @@ export function useLiveSession({ config, onAgentEvent, onTranscript, enabled = t
       }
       run.handMap = applyHandEvent(run.handMap, envelope, publishHands);
       const metadata = eventMetadata(envelope, run.listenerMap);
+      if (event === 'answer_verdict' && !envelope.replay) {
+        setLatestVerdict({ ...metadata, verdict: data.verdict, comment: data.comment });
+      }
       if (event === 'question_taken' || event === 'qa_question') {
         run.active = { ...data, ...metadata, status: 'taken' };
         setActiveQuestion(run.active);
@@ -129,9 +135,7 @@ export function useLiveSession({ config, onAgentEvent, onTranscript, enabled = t
       const gauge = mapRoomGauge(envelope);
       if (gauge) setRoom(gauge);
       let mapped = mapAgentEvent(envelope, run.listenerMap);
-      // A periodic reaction must not hide a still-raised, actionable hand.
-      const raised = Object.values(run.handMap).find((hand) => hand.status === 'raised' && hand.listener === data.listener);
-      if (mapped && event === 'reaction' && raised) mapped = { ...mapped, action: 'raise_hand', text: raised.question };
+      mapped = preserveRaisedHand(mapped, envelope, run.handMap);
       if (mapped && event === 'reaction' && run.speakingListener === data.listener) mapped = { ...mapped, action: 'speaking', text: undefined };
       // A replay rebuilds visible state but must not repeat old question speech/transcripts.
       if (mapped && envelope.replay && ['speaking', 'nodding'].includes(mapped.action)) mapped = { ...mapped, action: 'listening', text: undefined };
@@ -226,16 +230,16 @@ export function useLiveSession({ config, onAgentEvent, onTranscript, enabled = t
   const request = useCallback(async (type, fields = {}) => {
     const run = runtime.current;
     if (!run?.socket) throw new Error('Wait for the live session to connect.');
-    setError(null);
+    errors.current.clear();
     try { return await run.socket.request(type, fields); }
-    catch (problem) { if (run.alive) setError(problem.message); throw problem; }
+    catch (problem) { if (run.alive) errors.current.show(problem); throw problem; }
   }, []);
   const callOn = useCallback((questionId) => request('take_question', { question_id: questionId }), [request]);
   const answerDone = useCallback((questionId) => request('answer_done', { question_id: questionId }), [request]);
   const setSlide = useCallback((index) => {
     const run = runtime.current;
     if (!run?.alive) return Promise.resolve(null);
-    setError(null);
+    errors.current.clear('slide');
     return run.slideSync.select(index);
   }, []);
   const endTalk = useCallback(() => request('end_presenting'), [request]);
@@ -256,6 +260,6 @@ export function useLiveSession({ config, onAgentEvent, onTranscript, enabled = t
   return { status: ['connecting', 'reconnecting'].includes(connectionState) ? connectionState : phase,
     connectionState, sessionId, speech, agents, hands, listeners, room, activeQuestion, error,
     events: debugLogs ? events : [], transcriptAcks: debugLogs ? transcriptAcks : [],
-    audioBlocked, questionPlayback, resumeAudio, callOn, answerDone, setSlide, endTalk,
+    audioBlocked, questionPlayback, latestVerdict, resumeAudio, callOn, answerDone, setSlide, endTalk,
     nextQuestion, finishQA, report, submitText: speech.sendText };
 }
