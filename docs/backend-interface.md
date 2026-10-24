@@ -36,7 +36,7 @@ uv run python verify.py                                 # offline checks
 
 `fake_client.py` is a working reference for the whole message flow; read it alongside this doc.
 
-Environment (see `.env.example`): `FRONTROW_LLM=fake|openai`, `OPENAI_API_KEY`, `FRONTROW_CORS_ORIGINS` (comma-separated, default `*`), plus the tunables in `frontrow/config.py`.
+Environment, read from the repo-root `.env` (copy `.env.example`; shell variables take precedence): `FRONTROW_LLM=fake|deepseek|openai`, `DEEPSEEK_API_KEY` / `OPENAI_API_KEY`, `FRONTROW_LLM_MODEL`, `FRONTROW_CORS_ORIGINS` (comma-separated, default `*`), plus the tunables in `frontrow/config.py`.
 
 ## 3. Session lifecycle
 
@@ -116,6 +116,8 @@ Every message may carry an `id` (string or number); the reply `ack`/`error` echo
 | `tick_start` | `tick, slide` | |
 | `reaction` | `tick, listener, persona, slide, attention, confusion, understood, has_question` | per-avatar meters (0-100) |
 | `tick_complete` | `tick, reactions, room: {attention, confusion, comprehension}` | room gauge; values `null` if nobody reacted |
+| `talk_summary` | `tick, summary` | rolling notes on the whole talk, refreshed after each tick and given to every listener |
+| `summary_error` | `tick, error` | debug: notes not refreshed this tick (the previous ones are kept) |
 | `hand_raised` | hand fields | show a raised hand; presenter may `take_question` |
 | `hand_lowered` | hand fields | ignored for 45s (or talk ended) → moved to Q&A pool |
 | `pooled` | hand fields | saved for Q&A (badge count) |
@@ -180,4 +182,4 @@ class STTTokenProvider(Protocol):
 
 - Sessions live in memory in one process: restarting the server loses them, and there's no auth.
 - `GET /report` is a v0 summary: room score per tick, question/answer verdict counts, and delivery stats (words, wpm, fillers, longest pause). The per-slide × persona heatmap and top fixes are still to come.
-- With `FRONTROW_LLM=fake`, reactions and verdicts are deterministic placeholders, good for building UI, not for judging a talk. Use `FRONTROW_LLM=openai` with `OPENAI_API_KEY` (and `uv sync --extra openai`) for real reactions.
+- With `FRONTROW_LLM=fake`, reactions and verdicts are deterministic placeholders, good for building UI, not for judging a talk. Use `FRONTROW_LLM=deepseek` with `DEEPSEEK_API_KEY` (and `uv sync --extra openai`) for real reactions.

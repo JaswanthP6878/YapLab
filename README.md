@@ -35,7 +35,7 @@ Slides (PDF) ──► per-slide text ──────────────
 
 1. The browser streams your voice to ElevenLabs speech-to-text using a short-lived token from the backend, and forwards each final transcript segment over the session WebSocket.
 2. Every 15 seconds, the orchestrator sends the latest stretch of your talk, plus the slides shown so far, to every listener at once.
-3. Each listener returns its attention, confusion, what it understood, and optionally a question that quotes your talk or slides. Listeners remember how they felt over the last few stretches, so attention drifts instead of resetting.
+3. Each listener returns its attention, confusion, what it understood, and optionally a question that quotes your talk or slides. Listeners remember how they felt over the last few stretches (so attention drifts instead of resetting), the questions they already raised and how those were answered (so they don't repeat themselves), and rolling notes on the whole talk so far (so they can connect what you say now to what you said minutes ago).
 4. The moderator lets one hand up at a time, preferring listeners who haven't spoken yet and are the most confused. Everything else is saved for Q&A.
 5. When you call on a hand, its question is spoken through text-to-speech; your answer is transcribed and the listener judges it as answered, partial, or dodged, and may ask one follow-up.
 6. At the end, listeners ask their best saved questions, then the report summarizes how the room followed you.
@@ -91,7 +91,7 @@ front_row/
     │           ├── base.py       # LLMClient interface
     │           ├── fake.py       # deterministic offline LLM for tests and fallback
     │           ├── fallback.py   # falls back to the fake LLM when the real one fails
-    │           └── openai_client.py
+    │           └── openai_client.py  # OpenAI-compatible client (DeepSeek, OpenAI)
     └── web/                      # React + Vite frontend (in progress)
 ```
 
@@ -113,7 +113,7 @@ The backend uses [uv](https://docs.astral.sh/uv/).
 ```bash
 cd apps/api
 uv sync
-cp ../../.env.example ../../.env      # FRONTROW_LLM=fake runs fully offline
+cp ../../.env.example ../../.env      # loaded automatically; FRONTROW_LLM=fake runs fully offline
 
 uv run python verify.py               # offline checks
 uv run python demo.py                 # replay the sample talk, print the room score per tick
@@ -123,7 +123,7 @@ uv run uvicorn frontrow.server:app --reload    # API at http://127.0.0.1:8000 (d
 uv run python -m frontrow.fake_client --tick 5 --speed 2 --take-hands
 ```
 
-To use a real model, set `FRONTROW_LLM=openai` and `OPENAI_API_KEY`, then `uv sync --extra openai`.
+To use a real model, run `uv sync --extra openai` (DeepSeek uses the OpenAI-compatible SDK), then set `FRONTROW_LLM=deepseek` and `DEEPSEEK_API_KEY`. The default model is `deepseek-flash`; set `FRONTROW_LLM_MODEL=deepseek-v4-pro` for the larger model. `FRONTROW_LLM=openai` with `OPENAI_API_KEY` also works. Settings are read from the repo-root `.env` (git-ignored) on startup; variables already set in your shell take precedence.
 
 After changing `frontrow/protocol.py`, regenerate the schema:
 
@@ -133,6 +133,6 @@ uv run python -m frontrow.protocol > ../../packages/protocol/schema.json
 
 ## Tech
 
-Python, FastAPI, asyncio, Pydantic, OpenAI models for listener reactions, ElevenLabs for speech-to-text and text-to-speech, React, Vite.
+Python, FastAPI, asyncio, Pydantic, DeepSeek V4 (OpenAI-compatible API) for listener reactions, ElevenLabs for speech-to-text and text-to-speech, React, Vite.
 
 ## Team
