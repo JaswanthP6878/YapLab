@@ -48,7 +48,7 @@ Slides (PDF) ──► per-slide text ──────────────
 | Server: REST + WebSocket, PDF slides, TTS/STT engine hooks | Done |
 | Report | v0: room score per tick, answer verdicts, delivery stats. Slide × persona heatmap and top fixes still to come |
 | Speech: ElevenLabs STT token + TTS engines | Integrated through optional provider extra |
-| Frontend (`apps/web`) | In progress |
+| Frontend (`frontend`) | Teaching supports live backend sessions; other modes keep the scripted demo |
 
 ## Repository layout
 
@@ -63,6 +63,7 @@ front_row/
 │       └── schema.json           # JSON schema for client/server messages (generated)
 ├── scenarios/
 │   └── sample_talk.json          # scripted talk used by verify, replay, and the fake client
+├── frontend/                    # React + Vite UI and /live-test.html bench
 └── apps/
     ├── api/                      # Python backend (FastAPI + asyncio)
     │   ├── pyproject.toml        # managed with uv
@@ -92,7 +93,6 @@ front_row/
     │           ├── fake.py       # deterministic offline LLM for tests and fallback
     │           ├── fallback.py   # falls back to the fake LLM when the real one fails
     │           └── openai_client.py  # OpenAI-compatible client (DeepSeek, OpenAI)
-    └── web/                      # React + Vite frontend (in progress)
 ```
 
 ## Where to start
@@ -144,6 +144,31 @@ After changing `frontrow/protocol.py`, regenerate the schema:
 ```bash
 uv run python -m frontrow.protocol > ../../packages/protocol/schema.json
 ```
+
+## Frontend
+
+From the repository root:
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+For live Teaching mode, set `VITE_API_URL=http://127.0.0.1:8000` in
+`frontend/.env.local`, then restart Vite. Leave it unset for the scripted demo.
+Pitch and Interview remain scripted. Open `/live-test.html` on the Vite server
+for the voice test bench; `/` opens the product UI.
+
+Run the backend from `apps/api` using the Quick start command above. For Claude
+and voice, install `uv sync --extra anthropic --extra elevenlabs` and set
+`FRONTROW_LLM=anthropic`, `FRONTROW_TTS=elevenlabs`, `FRONTROW_STT=elevenlabs`,
+`ANTHROPIC_API_KEY`, and `ELEVENLABS_API_KEY` in the repo-root `.env`. The default
+listener tick is 15 seconds. All provider keys stay on the backend.
+
+From `frontend`, use `npm run test:live` for offline bridge checks and
+`npm run build` for the production build. More details are in
+[the live bridge guide](frontend/src/live/README.md).
 
 ## Tech
 

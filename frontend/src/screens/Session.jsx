@@ -11,7 +11,6 @@ import { API_URL } from '../live/client.js';
 import { makeLiveConfig } from '../live/liveConfig.js';
 import { useLiveSession } from '../live/useLiveSession.js';
 import LiveControls from '../live/LiveControls.jsx';
-import LiveReport from '../live/LiveReport.jsx';
 
 // The room is distraction-free: no scores, tips or transcript while you present.
 // Everything is still measured by the engine and shown in the report afterwards.
@@ -90,24 +89,29 @@ export default function Session({ config: initialConfig, onExit, onEnd, onAgentE
   const panel = present.filter(isPanel);
   const audience = present.filter((p) => !isPanel(p));
   const prevAgents = useRef(null);
+  const reportedLiveReport = useRef(null);
   const live = useLiveSession({ config: { ...config, voices }, enabled: liveMode,
-    onTranscript: (text) => dispatch({ type: 'USER_SAY', text }),
+    onTranscript: (text) => dispatch({ type: 'LIVE_SAY', text }),
     onAgentEvent: (event) => { const action = agentEventToAction(event); if (action) dispatch(action); },
   });
   const liveReady = ['presenting', 'qa'].includes(live.status) && live.connectionState === 'connected';
   const clockRunning = liveMode ? liveReady : running;
 
+  useEffect(() => {
+    if (!liveMode || !live.report || reportedLiveReport.current === live.report) return;
+    reportedLiveReport.current = live.report;
+    onEnd({ kind: 'live', report: live.report, config: { ...config, voices } });
+  }, [liveMode, live.report, config, voices, onEnd]);
+
   // Uploaded decks are paged by you; the demo deck follows the scripted presenter.
   const upCount = usePageCount(config.slides);
   const page = config.slides ? upPage : st.slide;
   const pageCount = config.slides ? upCount : deck.segments.length;
-  const goTo = async (n) => {
+  const goTo = (n) => {
     if (n < 0 || n >= pageCount) return;
-    if (liveMode) {
-      try { await live.setSlide(n); } catch { return; } // The bridge displays the request error.
-    }
     if (config.slides) setUpPage(n);
     else dispatch({ type: 'SET_SLIDE', slide: n });
+    if (liveMode) void live.setSlide(n).catch(() => {}); // Best-effort sync; slides stay responsive offline.
   };
 
   const respond = (text) => {
@@ -204,8 +208,6 @@ export default function Session({ config: initialConfig, onExit, onEnd, onAgentE
   const tiles = [...panel, ...audience].map((p, i) => st.agents[p.id] && <AgentTile key={p.id} p={p} a={st.agents[p.id]} i={i} onCall={callOn} />);
   const self = <SelfTile camera={config.camera} listening={speech.listening && !speech.muted} interim={speech.interim} />;
   const question = !hasSlides && deck.segments[st.slide]?.prompt?.text;
-
-  if (liveMode && live.report) return <LiveReport report={live.report} onExit={onExit} />;
 
   return (
     <div className={`session room-only mode-${mode.id}`} style={liveMode ? { gridTemplateRows: 'auto minmax(0, 1fr) auto auto' } : undefined}>

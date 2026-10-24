@@ -97,9 +97,11 @@ test('duration remains seconds, ignores non-word events, and never invents missi
 
 test('backend token extras and all microphone constraints become SDK runtime settings', () => {
   assert.deepEqual(scribeConnectOptions({ ...token, model_id: 'returned-model',
-    vad_silence_threshold_secs: 0.9, include_timestamps: false }), {
+    vad_silence_threshold_secs: 0.9, include_timestamps: false,
+    language_code: 'es', secondary_languages: ['fr'] }), {
     token: 'ephemeral', modelId: 'returned-model', vadSilenceThresholdSecs: 0.9,
     includeTimestamps: false, commitStrategy: 'vad', noVerbatim: false,
+    languageCode: 'en', secondaryLanguages: [],
     microphone: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
   });
   assert.throws(() => scribeConnectOptions({}), /token/);
@@ -169,6 +171,12 @@ test('backend WS reconnect fetches a fresh token and never reuses a transcript s
   h.audio(); h.final('After');
   await flush();
   assert.equal(h.tokenCalls.length, 2);
+  assert.equal(h.sdkSettings.length, 2);
+  for (const settings of h.sdkSettings) {
+    assert.equal(settings.languageCode, 'en', 'initial and reconnect calls must pin English');
+    assert.deepEqual(settings.secondaryLanguages, [], 'no other language hints are sent');
+    assert.equal('keyterms' in settings, false);
+  }
   assert.deepEqual(h.requests.map((request) => request.fields.seq), [0, 1]);
   assert.deepEqual(h.finals, ['Before', 'After']);
   old.emit('committed_transcript_with_timestamps', { text: 'Old late text', words: [] });
