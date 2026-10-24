@@ -6,4 +6,10 @@ deterministic fake), persona-driven listener agents, grounding, a moderator,
 and the tick-loop orchestrator.
 """
 
+from .config import load_env_file
+
 __version__ = "0.1.0"
+
+# Every entry point (server, replay, demo, fake client) imports this package
+# first, so the repo-root .env is loaded before anything reads the environment.
+load_env_file()

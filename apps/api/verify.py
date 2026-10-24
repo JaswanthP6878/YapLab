@@ -16,9 +16,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 import traceback
 from pathlib import Path
+
+# Always offline, whatever the repo .env selects (set before frontrow loads it;
+# the .env never overrides variables that are already set).
+os.environ["FRONTROW_LLM"] = "fake"
 
 from frontrow.agent import Listener
 from frontrow.clock import RealClock, SimulatedClock
@@ -35,6 +40,7 @@ from frontrow.moderator import Moderator
 from frontrow.orchestrator import Orchestrator
 from frontrow.personas import build_room
 from frontrow.transcript import TranscriptBuffer
+from verify_voice_integration import VOICE_CHECKS
 
 SCENARIO_PATH = (
     Path(__file__).resolve().parents[2] / "scenarios" / "sample_talk.json"
@@ -804,6 +810,107 @@ def check_answer_evaluation_grounds_follow_up() -> None:
     asyncio.run(run())
 
 
+class _ScriptedRoom(FakeLLM):
+    """Records every prompt; L0 asks one question on its first tick only."""
+
+    def __init__(self, fail_summary_at: int | None = None) -> None:
+        self.prompts: list[tuple[str, str]] = []
+        self.summaries = 0
+        self.fail_summary_at = fail_summary_at
+
+    async def complete(self, system, user, *, model, timeout):  # type: ignore[override]
+        self.prompts.append((system, user))
+        if "[[FRONTROW_SUMMARY]]" in system:
+            self.summaries += 1
+            if self.summaries == self.fail_summary_at:
+                raise RuntimeError("summary down")
+            return json.dumps({"summary": f"NOTES-{self.summaries}"})
+        if "[[FRONTROW_ANSWER]]" in system:
+            return json.dumps({"verdict": "partial", "comment": "only half of it"})
+        if "PERSONA_NAME: confused first-year" in user and "Questions you already raised" not in user:
+            return json.dumps({"attention": 50, "confusion": 80, "understood": "?",
+                               "question": "What is a quorum?", "quote": "quorum of replicas"})
+        return json.dumps({"attention": 70, "confusion": 20, "understood": "ok"})
+
+    def reaction_prompts(self, persona: str) -> list[str]:
+        return [u for s, u in self.prompts
+                if "[[FRONTROW_REACTION]]" in s and f"PERSONA_NAME: {persona}\n" in u]
+
+    def summary_prompts(self) -> list[str]:
+        return [u for s, u in self.prompts if "[[FRONTROW_SUMMARY]]" in s]
+
+
+async def _room_session(llm: FakeLLM):
+    from frontrow.session import Session
+
+    clock = SimulatedClock()
+    session = Session(config=Config(), clock=clock, llm=llm)
+    session.start()
+    await asyncio.sleep(0)
+
+    async def speak_then_tick(seq: int, text: str) -> None:
+        await clock.advance(5.0)
+        session.ingest_transcript(seq, text)
+        await clock.advance(10.0)
+        await session.orchestrator.wait_idle()
+
+    return clock, session, speak_then_tick
+
+
+def check_talk_summary_reaches_next_tick() -> None:
+    async def run() -> None:
+        llm = _ScriptedRoom(fail_summary_at=3)
+        _, session, speak_then_tick = await _room_session(llm)
+        await speak_then_tick(0, "Alpha topic: a strongly consistent system needs a quorum of replicas.")
+        await speak_then_tick(1, "Beta topic: vector clocks detect concurrent updates.")
+        await speak_then_tick(2, "Gamma topic: eventual consistency.")   # summary call fails here
+        await speak_then_tick(3, "Delta topic: quorum reads.")
+
+        summaries = llm.summary_prompts()
+        # each update sees only speech since the last successful one
+        assert "Alpha" in summaries[0] and "Beta" not in summaries[0]
+        assert "NOTES-1" in summaries[1] and "Beta" in summaries[1] and "Alpha" not in summaries[1]
+        # after the failed 3rd update, the 4th retries Gamma along with Delta
+        assert "Gamma" in summaries[3] and "Delta" in summaries[3], summaries[3]
+        prompts = llm.reaction_prompts("skeptical professor")
+        assert "The talk so far" not in prompts[0], "no notes before the first tick"
+        assert "The talk so far, in brief: NOTES-1" in prompts[1]
+        assert "The talk so far, in brief: NOTES-2" in prompts[3], "failure keeps old notes"
+        events = [e.type for e in session.events]
+        assert events.count("talk_summary") == 3 and events.count("summary_error") == 1, events
+        await session.close()
+
+    asyncio.run(run())
+
+
+def check_listener_remembers_its_questions() -> None:
+    async def run() -> None:
+        llm = _ScriptedRoom()
+        clock, session, speak_then_tick = await _room_session(llm)
+        await speak_then_tick(0, "A strongly consistent system needs a quorum of replicas.")
+        raised = [e for e in session.events if e.type == "hand_raised"]
+        assert len(raised) == 1 and raised[0].data["listener"] == "L0", raised
+        qid = raised[0].data["question_id"]
+
+        await speak_then_tick(1, "Next, vector clocks.")
+        second = llm.reaction_prompts("confused first-year")[1]
+        assert '"What is a quorum?" (hand raised, not asked yet)' in second, second
+
+        session.take_question(qid)
+        await clock.advance(1.0)
+        session.ingest_transcript(2, "A quorum is a majority of replicas.")
+        session.answer_done(qid)
+        await session.drain()
+        await speak_then_tick(3, "Finally, eventual consistency.")
+        third = llm.reaction_prompts("confused first-year")[2]
+        assert "(asked; you judged the answer partial: only half of it)" in third, third
+        # other listeners never see L0's questions
+        assert "What is a quorum?" not in llm.reaction_prompts("ESL student")[2]
+        await session.close()
+
+    asyncio.run(run())
+
+
 def _tiny_pdf(texts: list[str]) -> bytes:
     """A minimal valid PDF with one line of text per page."""
     objs = ["<< /Type /Catalog /Pages 2 0 R >>", ""]
@@ -971,8 +1078,13 @@ CHECKS = [
     ("session take -> answer -> verdict -> follow-up", check_session_take_answer_and_follow_up),
     ("listener memory reaches the prompt", check_listener_memory_reaches_prompt),
     ("answer evaluation grounds follow-ups in the answer", check_answer_evaluation_grounds_follow_up),
+    ("talk summary: incremental, shared, survives a failure", check_talk_summary_reaches_next_tick),
+    ("listener remembers its own questions and verdicts", check_listener_remembers_its_questions),
     ("server: REST + WebSocket session with stub speech engines", check_server_end_to_end),
 ]
+
+
+CHECKS.extend(VOICE_CHECKS)
 
 
 def main() -> int:

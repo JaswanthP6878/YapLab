@@ -64,6 +64,20 @@ class Listener:
         # A question from the most recent react() call that failed grounding,
         # as ``(question, quote)``, so the orchestrator can record it.
         self.last_rejected_question: tuple[str, str] | None = None
+        # Questions this listener raised, oldest first, as
+        # ``{"id", "question", "status"}``; fed back into its prompt so it
+        # does not repeat itself and knows which answers fell short.
+        self.questions: list[dict[str, str]] = []
+
+    def note_question(self, question_id: str, question: str, status: str) -> None:
+        """Remember a question this listener raised."""
+        self.questions.append({"id": question_id, "question": question, "status": status})
+
+    def update_question(self, question_id: str, status: str) -> None:
+        """Update what happened to one of this listener's questions."""
+        for q in self.questions:
+            if q["id"] == question_id:
+                q["status"] = status
 
     async def react(
         self,
@@ -76,11 +90,15 @@ class Listener:
         grounding_min_chars: int = 10,
         current_slide: int | None = None,
         memory_ticks: int = 3,
+        talk_summary: str = "",
+        question_memory: int = 5,
     ) -> Reaction | None:
         """Produce a :class:`Reaction` for the given transcript window.
 
         The listener's last ``memory_ticks`` reactions are included in the
-        prompt so its attention and confusion carry over between ticks.
+        prompt so its attention and confusion carry over between ticks, along
+        with its last ``question_memory`` questions and what happened to them,
+        and ``talk_summary`` (notes on the whole talk so far).
 
         ``clock`` is accepted for interface symmetry and future use (e.g.
         think-time simulation); the actual LLM timeout is enforced by the
@@ -96,6 +114,8 @@ class Listener:
             slides,
             current_slide=current_slide,
             memory=recent,
+            questions=self.questions[-question_memory:] if question_memory else [],
+            talk_summary=talk_summary,
         )
         payload = await self.llm.complete_json(
             system, user, model=model, timeout=timeout

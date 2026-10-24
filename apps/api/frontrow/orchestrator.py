@@ -16,9 +16,11 @@ from collections.abc import Callable
 from .agent import Listener
 from .clock import Clock
 from .config import Config
+from .llm.base import LLMClient
 from .metrics import room_summary
 from .models import HandRaise, Reaction, Slide, TimelineEvent
 from .moderator import Moderator
+from .prompts import build_summary_prompt
 from .transcript import TranscriptBuffer
 
 EventSink = Callable[[TimelineEvent], None]
@@ -36,6 +38,7 @@ class Orchestrator:
         moderator: Moderator,
         slides: list[Slide] | None = None,
         event_sink: EventSink | None = None,
+        summarizer: LLMClient | None = None,
     ) -> None:
         self._config = config
         self._clock = clock
@@ -49,6 +52,11 @@ class Orchestrator:
         self._tick_running = False
         self._question_count = 0
         self._current_slide: int | None = None
+        # Rolling notes on the whole talk, refreshed after each tick by
+        # ``summarizer`` and shared with every listener. None disables it.
+        self._summarizer = summarizer
+        self._talk_summary = ""
+        self._summarized_until = 0.0
         # Clock time the most recent tick started, or None before any tick.
         self.last_tick_start: float | None = None
         self._inflight_tick: "asyncio.Task[None] | None" = None
@@ -90,6 +98,11 @@ class Orchestrator:
         return f"q{self._question_count}"
 
     @property
+    def talk_summary(self) -> str:
+        """Notes on the talk so far, as of the last tick."""
+        return self._talk_summary
+
+    @property
     def current_slide(self) -> int | None:
         """Index of the slide on screen, or ``None`` if never set."""
         return self._current_slide
@@ -119,6 +132,8 @@ class Orchestrator:
                 grounding_min_chars=self._config.grounding_min_span_chars,
                 current_slide=self._current_slide,
                 memory_ticks=self._config.listener_memory_ticks,
+                talk_summary=self._talk_summary,
+                question_memory=self._config.listener_question_memory,
             )
         )
 
@@ -255,10 +270,17 @@ class Orchestrator:
             handraises, self._clock.now()
         )
 
+        by_id = {lst.listener_id: lst for lst in self._listeners}
         if raised is not None:
             self.record_hand("hand_raised", raised, tick=tick_index)
+            by_id[raised.listener_id].note_question(
+                raised.question_id, raised.question.question, "hand raised, not asked yet"
+            )
         for h in pooled:
             self.record_hand("pooled", h, tick=tick_index)
+            by_id[h.listener_id].note_question(
+                h.question_id, h.question.question, "saved for Q&A, not asked yet"
+            )
 
         self._emit(
             "tick_complete",
@@ -266,6 +288,39 @@ class Orchestrator:
             reactions=len(reactions),
             room=room_summary(reactions),
         )
+        await self._update_summary(tick_index)
+
+    async def _update_summary(self, tick_index: int) -> None:
+        """Fold speech since the last update into the rolling talk summary.
+
+        Runs after ``tick_complete`` so the room score is never delayed; the
+        next tick's listeners see the result. A failure keeps the old notes.
+        """
+        if self._summarizer is None:
+            return
+        now = self._clock.now()
+        new = [c for c in self._transcript.chunks if self._summarized_until < c.end <= now]
+        if not new:
+            return
+        system, user = build_summary_prompt(
+            self._talk_summary, self._transcript.full_text(new)
+        )
+        try:
+            payload = await self._summarizer.complete_json(
+                system,
+                user,
+                model=self._config.llm_model,
+                timeout=self._config.llm_timeout_seconds,
+            )
+        except Exception as exc:  # noqa: BLE001 - keep the previous notes
+            self._emit("summary_error", tick=tick_index, error=type(exc).__name__)
+            return
+        summary = " ".join(str(payload.get("summary") or "").split())
+        if not summary:
+            return
+        self._talk_summary = summary[: self._config.talk_summary_max_chars]
+        self._summarized_until = max(c.end for c in new)
+        self._emit("talk_summary", tick=tick_index, summary=self._talk_summary)
 
     # --- tick loop with backpressure -------------------------------------
 

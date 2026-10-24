@@ -9,7 +9,7 @@ against a real model (falling back to the FakeLLM per request on failure).
     cd apps/api
     uv run python -m frontrow.replay                       # sample talk, fake LLM
     uv run python -m frontrow.replay ../../scenarios/sample_talk.json --print-timeline
-    uv run --extra openai python -m frontrow.replay --llm openai   # needs OPENAI_API_KEY
+    uv run --extra openai python -m frontrow.replay --llm deepseek  # needs DEEPSEEK_API_KEY
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -25,6 +26,7 @@ from .config import Config
 from .llm.base import LLMClient
 from .llm.fake import FakeLLM
 from .llm.fallback import FallbackLLM
+from .llm.openai_client import PROVIDERS, OpenAIClient
 from .metrics import filler_count, longest_pause, speaking_rate, word_count
 from .models import HandRaise, Slide, TimelineEvent, TranscriptChunk
 from .session import Session
@@ -77,13 +79,11 @@ def load_scenario(path: Path) -> Scenario:
 
 
 def make_llm(kind: str) -> LLMClient:
-    """Build the LLM client for ``kind`` (``fake`` or ``openai``)."""
+    """Build the LLM client for ``kind`` (``fake``, ``deepseek``, or ``openai``)."""
     if kind == "fake":
         return FakeLLM()
-    if kind == "openai":
-        from .llm.openai_client import OpenAIClient
-
-        return FallbackLLM(OpenAIClient())
+    if kind in PROVIDERS:
+        return FallbackLLM(OpenAIClient(provider=kind))
     raise ValueError(f"unknown llm kind: {kind!r}")
 
 
@@ -248,7 +248,7 @@ def print_timeline(events: list[TimelineEvent]) -> None:
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(description="Replay a scripted talk through FrontRow.")
     p.add_argument("scenario", nargs="?", type=Path, default=DEFAULT_SCENARIO)
-    p.add_argument("--llm", default="fake", choices=["fake", "openai"])
+    p.add_argument("--llm", default="fake", choices=["fake", *PROVIDERS])
     p.add_argument("--model", default=None, help="model name (default from config)")
     p.add_argument("--preset", default="default")
     p.add_argument("--tick", type=float, default=None, help="tick interval seconds")
@@ -259,6 +259,8 @@ def main(argv: list[str] | None = None) -> None:
     overrides: dict[str, object] = {}
     if args.model:
         overrides["llm_model"] = args.model
+    elif args.llm in PROVIDERS and not os.environ.get("FRONTROW_LLM_MODEL"):
+        overrides["llm_model"] = PROVIDERS[args.llm].default_model
     if args.tick:
         overrides["tick_interval_seconds"] = args.tick
         overrides["per_listener_timeout_seconds"] = min(10.0, args.tick * 2 / 3)

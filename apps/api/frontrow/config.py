@@ -9,8 +9,24 @@ Values can be loaded from the environment with sensible fallbacks via
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from pydantic import BaseModel, Field, model_validator
+
+# The repo-root .env (front_row/.env), copied from .env.example.
+ENV_FILE = Path(__file__).resolve().parents[3] / ".env"
+
+
+def load_env_file(path: Path = ENV_FILE) -> bool:
+    """Load ``path`` into the environment if it exists.
+
+    Variables already set in the real environment win over the file, so a
+    one-off ``FRONTROW_LLM=fake uv run ...`` still works. Returns whether a
+    file was loaded.
+    """
+    from dotenv import load_dotenv
+
+    return path.is_file() and load_dotenv(path, override=False)
 
 
 def _env_float(name: str, default: float) -> float:
@@ -43,6 +59,17 @@ def _env_str(name: str, default: str) -> str:
     return raw
 
 
+def _default_model() -> str:
+    """Default model for the provider named by ``FRONTROW_LLM``."""
+    from .llm.openai_client import PROVIDERS
+
+    name = _env_str("FRONTROW_LLM", "fake").strip().lower()
+    if name == "anthropic":
+        return "claude-haiku-5-5"
+    provider = PROVIDERS.get(name)
+    return provider.default_model if provider else "gpt-4o-mini"
+
+
 class Config(BaseModel):
     """Runtime configuration for a FrontRow session.
 
@@ -67,6 +94,13 @@ class Config(BaseModel):
     # How many of a listener's most recent reactions are fed back into its
     # prompt, so attention and confusion carry over between ticks.
     listener_memory_ticks: int = Field(default=3, ge=0)
+
+    # How many of a listener's own earlier questions (and what happened to
+    # them) are fed back into its prompt, so it does not repeat itself.
+    listener_question_memory: int = Field(default=5, ge=0)
+
+    # Upper bound on the rolling talk summary shared with every listener.
+    talk_summary_max_chars: int = Field(default=1200, ge=100)
 
     # A raised hand the presenter has not called on within this many seconds
     # is lowered and its question moves to the Q&A pool.
@@ -95,17 +129,23 @@ class Config(BaseModel):
 
         Explicit ``overrides`` take precedence over environment values.
         """
+        tick_interval = _env_float("FRONTROW_TICK_INTERVAL_SECONDS", 15.0)
+        # Shorter demo ticks need an implicit listener deadline below the tick.
+        # Explicit timeouts still go through the normal consistency validation.
+        try:
+            effective_tick = float(overrides.get("tick_interval_seconds", tick_interval))
+        except (TypeError, ValueError):
+            effective_tick = tick_interval  # Config validation reports invalid overrides.
+        listener_timeout_default = min(10.0, effective_tick * 2 / 3)
         values: dict[str, object] = {
-            "tick_interval_seconds": _env_float(
-                "FRONTROW_TICK_INTERVAL_SECONDS", 15.0
-            ),
+            "tick_interval_seconds": tick_interval,
             "per_listener_timeout_seconds": _env_float(
-                "FRONTROW_PER_LISTENER_TIMEOUT_SECONDS", 10.0
+                "FRONTROW_PER_LISTENER_TIMEOUT_SECONDS", listener_timeout_default
             ),
             "transcript_window_seconds": _env_float(
                 "FRONTROW_TRANSCRIPT_WINDOW_SECONDS", 30.0
             ),
-            "llm_model": _env_str("FRONTROW_LLM_MODEL", "gpt-4o-mini"),
+            "llm_model": _env_str("FRONTROW_LLM_MODEL", _default_model()),
             "llm_timeout_seconds": _env_float("FRONTROW_LLM_TIMEOUT_SECONDS", 30.0),
             "moderator_min_interruption_gap_seconds": _env_float(
                 "FRONTROW_MODERATOR_GAP_SECONDS", 60.0

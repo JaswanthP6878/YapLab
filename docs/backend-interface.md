@@ -29,14 +29,14 @@ The backend owns the clock, who speaks when, and every API key. The browser owns
 ```bash
 cd apps/api
 uv sync
-uv run uvicorn frontrow.server:app --reload            # http://127.0.0.1:8000, docs at /docs
+uv run uvicorn frontrow.server:app --env-file ../../.env --reload   # http://127.0.0.1:8000
 uv run python -m frontrow.fake_client --tick 5 --speed 2 --take-hands   # a scripted "browser"
 uv run python verify.py                                 # offline checks
 ```
 
 `fake_client.py` is a working reference for the whole message flow; read it alongside this doc.
 
-Environment (see `.env.example`): `FRONTROW_LLM=fake|openai`, `OPENAI_API_KEY`, `FRONTROW_CORS_ORIGINS` (comma-separated, default `*`), plus the tunables in `frontrow/config.py`.
+Environment, read from the repo-root `.env` (copy `.env.example`; shell variables take precedence): `FRONTROW_LLM=fake|deepseek|anthropic|openai`, the selected provider's API key (`DEEPSEEK_API_KEY`, `ANTHROPIC_API_KEY`, or `OPENAI_API_KEY`), `FRONTROW_CORS_ORIGINS` (comma-separated, default `*`), plus the tunables in `frontrow/config.py`. Install `uv sync --extra openai` for DeepSeek or OpenAI, `--extra anthropic` for Claude. If `FRONTROW_LLM_MODEL` is unset/blank, the defaults are `deepseek-flash`, `claude-haiku-5-5`, and `gpt-4o-mini`. Shorter ticks use a shorter implicit listener timeout; explicitly configured timeouts must remain below the tick interval.
 
 ## 3. Session lifecycle
 
@@ -116,6 +116,8 @@ Every message may carry an `id` (string or number); the reply `ack`/`error` echo
 | `tick_start` | `tick, slide` | |
 | `reaction` | `tick, listener, persona, slide, attention, confusion, understood, has_question` | per-avatar meters (0-100) |
 | `tick_complete` | `tick, reactions, room: {attention, confusion, comprehension}` | room gauge; values `null` if nobody reacted |
+| `talk_summary` | `tick, summary` | rolling notes on the whole talk, refreshed after each tick and given to every listener |
+| `summary_error` | `tick, error` | debug: notes not refreshed this tick (the previous ones are kept) |
 | `hand_raised` | hand fields | show a raised hand; presenter may `take_question` |
 | `hand_lowered` | hand fields | ignored for 45s (or talk ended) → moved to Q&A pool |
 | `pooled` | hand fields | saved for Q&A (badge count) |
@@ -165,6 +167,8 @@ class STTTokenProvider(Protocol):
 
 **Wiring.** Return your engines from `speech_engines_from_env()` in `frontrow/server.py` (e.g. pick by `FRONTROW_TTS=elevenlabs`), or pass them to `create_app(tts=..., stt_tokens=...)`. The defaults (`NoTTS`, `NoSTTTokens`) mean text-only questions and a `501` from the token endpoint.
 
+**ElevenLabs.** Install `uv sync --extra elevenlabs`, set `ELEVENLABS_API_KEY`, and select `FRONTROW_TTS=elevenlabs` and/or `FRONTROW_STT=elevenlabs`. `FRONTROW_TTS_MODEL` defaults to `eleven_flash_v2_5`; conversational v4/v3 models use the dialogue WebSocket. Each engine reuses its HTTP client until app shutdown. `frontrow/voices.json` maps persona names to primary/alternate voices, selected by listener number modulo list length; inspect the account with `uv run python scripts/list_voices.py`. Scribe tokens expire after 900 seconds and expose `model_id=scribe_v2_realtime`, `vad_silence_threshold_secs=0.7`, and `include_timestamps=true` alongside the token. Unset/`none` retains the stand-ins; unknown engine values fail clearly.
+
 **TTS expectations**
 - Called once per question when it is raised (`hand_raised`) or asked in Q&A (`qa_question`); the result is cached per `question_id` and served at `/sessions/{id}/audio/{question_id}`.
 - Pick the voice from `persona` (one distinct voice per persona); use `listener_id` to vary voices when a room has two of the same persona (`lecture_hall`).
@@ -180,4 +184,4 @@ class STTTokenProvider(Protocol):
 
 - Sessions live in memory in one process: restarting the server loses them, and there's no auth.
 - `GET /report` is a v0 summary: room score per tick, question/answer verdict counts, and delivery stats (words, wpm, fillers, longest pause). The per-slide × persona heatmap and top fixes are still to come.
-- With `FRONTROW_LLM=fake`, reactions and verdicts are deterministic placeholders, good for building UI, not for judging a talk. Use `FRONTROW_LLM=openai` with `OPENAI_API_KEY` (and `uv sync --extra openai`) for real reactions.
+- With `FRONTROW_LLM=fake`, reactions and verdicts are deterministic placeholders, good for building UI, not for judging a talk. For real reactions use `FRONTROW_LLM=deepseek` with `DEEPSEEK_API_KEY` (`uv sync --extra openai`) or `FRONTROW_LLM=anthropic` with `ANTHROPIC_API_KEY` (`uv sync --extra anthropic`); OpenAI remains supported with `FRONTROW_LLM=openai`, `OPENAI_API_KEY`, and `--extra openai`.
