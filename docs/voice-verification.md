@@ -151,7 +151,8 @@ shutdown closes both speech and LLM clients after their producers/jobs stop.
 
 ### Persona voices
 
-Every persona has a unique primary and at least two available voices. Selection
+Every persona has at least two available voices, and the pools are disjoint:
+no voice ID belongs to more than one persona. Selection
 uses the numeric listener ID modulo the list length. First-year and engaged
 lists have four and three entries respectively, so duplicate listeners differ
 in both `full_room` and `lecture_hall`.
@@ -161,12 +162,16 @@ in both `full_room` and `lecture_hall`.
 | confused first-year | Jessica | Sarah, Laura, Matilda |
 | skeptical professor | Bill — older, wise/balanced | Daniel — formal British broadcaster |
 | ESL student | Monika Sogam — natural Indian English | Anika — conversational Indian English |
-| distracted student | Will | Charlie |
-| domain expert | Lily | Daniel |
+| distracted student | Will | Roger — laid-back conversational voice |
+| domain expert | Lily | Alice — clear British educator |
 | engaged student | Liam | Charlie, Chris |
 
 Professor IDs are Bill `pqHfZKP75CvOlQylNhV4` and Daniel `onwK4e9ZLuTAKqWW03F9`.
 ESL IDs are Monika `2zRM7PkgwBPiau2jvVXc` and Anika `90ipbRoKi4CpHXvKVtl0`.
+Distracted-student alternate Roger is `CwhRBWXzGAHq8TQ4Fs17`; domain-expert
+alternate Alice is `Xb7hH8MSUJpSbSDYk0k2`. Both were verified in the account catalog.
+They replace shared Charlie/Daniel entries so listeners from different personas
+cannot accidentally share a voice.
 Bill/Daniel came from the account's saved catalog. The saved catalog's only
 Indian-accent voice was a cartoon child, so the ESL choices came from the
 account-authenticated professional voice library instead. Both synthesized a
@@ -210,10 +215,11 @@ Its adjusted attention was 67 and confusion 78. Its grounded spoken question was
 
 ### Offline checks and small compatibility fixes
 
-`uv run python verify.py`: **41 passed, zero failed**, including all 28 original
+`uv run python verify.py`: **42 passed, zero failed**, including all 28 original
 checks. Provider checks use in-memory SDK stand-ins and require no network or
 provider credentials. They cover factories, optional dependencies, JSON-only
-Claude responses/fallbacks, voice-map coverage and duplicate listeners, client
+Claude responses/fallbacks, disjoint voice pools and pairwise-distinct listener
+voices in every room preset, client
 reuse, token settings, sanitized errors, dependency injection, and shutdown.
 
 The requested five-second tick previously conflicted with the implicit ten-second

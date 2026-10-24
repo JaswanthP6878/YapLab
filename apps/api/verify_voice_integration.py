@@ -235,6 +235,37 @@ def check_voice_map_and_duplicate_listeners() -> None:
             asyncio.run(engine.aclose())
 
 
+def check_voice_pools_and_room_assignments_are_disjoint() -> None:
+    """Different personas and every listener in a preset need distinct voices."""
+    from frontrow.speech_elevenlabs import ElevenLabsTTS
+
+    with _sdk_stubs(), _environment(ELEVENLABS_API_KEY="offline-key"):
+        engine = ElevenLabsTTS()
+        try:
+            owners = {}
+            for persona, voices in engine.voices.items():
+                for voice in voices:
+                    owners.setdefault(voice, set()).add(persona)
+            pool_collisions = {voice: sorted(personas) for voice, personas in owners.items()
+                               if len(personas) > 1}
+            room_collisions = {}
+            for preset in ROOM_PRESETS:
+                selected = {}
+                for listener_id, persona in build_room(preset):
+                    voice = engine.voice_for(persona.name, listener_id)
+                    selected.setdefault(voice, []).append(f"{listener_id} ({persona.name})")
+                duplicates = {voice: listeners for voice, listeners in selected.items()
+                              if len(listeners) > 1}
+                if duplicates:
+                    room_collisions[preset] = duplicates
+            assert not pool_collisions and not room_collisions, (
+                f"Shared persona pools: {pool_collisions}; "
+                f"duplicate room voices: {room_collisions}"
+            )
+        finally:
+            asyncio.run(engine.aclose())
+
+
 def check_elevenlabs_tts_client_reuse_and_token_contract() -> None:
     from frontrow.speech_elevenlabs import ElevenLabsSTTTokens, ElevenLabsTTS
 
@@ -612,6 +643,7 @@ VOICE_CHECKS = [
     ("speech factories: stand-ins/ElevenLabs + unknown provider", check_speech_provider_factories),
     ("optional SDK and missing-key errors stay clear", check_optional_provider_errors),
     ("voice map covers personas with distinct duplicate voices in every room", check_voice_map_and_duplicate_listeners),
+    ("voice pools are disjoint and all room listeners have unique voices", check_voice_pools_and_room_assignments_are_disjoint),
     ("ElevenLabs: reusable clients, MP3 chunks, STT token contract", check_elevenlabs_tts_client_reuse_and_token_contract),
     ("ElevenLabs provider failures redact response bodies", check_elevenlabs_failures_are_sanitized),
     ("Anthropic: request options and JSON-only completion", check_anthropic_completion_and_json_contract),
