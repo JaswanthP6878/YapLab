@@ -46,6 +46,7 @@ Vite loads `frontend/vite.config.js`. Open `/` for the product UI or
 the scripted demo. Only Teaching uses the live backend; Pitch and Interview
 keep their demo behavior even when an API URL is configured.
 
+Transcription is pinned to English (`en`), with no secondary language hints.
 Use headphones. Start a session, enable audio, start the microphone, then speak
 with pauses. Final captions appear only after a transcript ack has
 `accepted: true`. The bench also accepts typed transcripts through the same

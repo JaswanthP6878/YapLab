@@ -45,6 +45,8 @@ export function scribeConnectOptions(token) {
     vadSilenceThresholdSecs: token.vad_silence_threshold_secs ?? 0.7,
     includeTimestamps: token.include_timestamps ?? true,
     commitStrategy: 'vad',
+    languageCode: 'en',
+    secondaryLanguages: [],
     noVerbatim: false,
     microphone: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
   };
