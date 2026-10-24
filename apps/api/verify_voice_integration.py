@@ -286,7 +286,7 @@ def check_elevenlabs_tts_client_reuse_and_token_contract() -> None:
             token = await tokens.create_token("offline-session")
             assert token.token == "offline-single-use-token" and token.provider == "elevenlabs"
             assert token.expires_in_seconds == 900
-            assert token.extra == {"model_id": "scribe_v2_realtime", "vad_silence_threshold_secs": 0.7,
+            assert token.extra == {"model_id": "scribe_v2_realtime", "language_code": "en", "vad_silence_threshold_secs": 0.7,
                                    "include_timestamps": True}
             assert state.token_calls == [{"token_type": "realtime_scribe", "request_options": {"max_retries": 0}}]
         finally:

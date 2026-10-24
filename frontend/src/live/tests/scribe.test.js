@@ -101,9 +101,11 @@ test('backend token extras and all microphone constraints become SDK runtime set
     language_code: 'es', secondary_languages: ['fr'] }), {
     token: 'ephemeral', modelId: 'returned-model', vadSilenceThresholdSecs: 0.9,
     includeTimestamps: false, commitStrategy: 'vad', noVerbatim: false,
-    languageCode: 'en', secondaryLanguages: [],
+    languageCode: 'es', secondaryLanguages: ['fr'],
     microphone: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
   });
+  assert.equal(scribeConnectOptions(token).languageCode, 'en');
+  assert.deepEqual(scribeConnectOptions(token).secondaryLanguages, []);
   assert.throws(() => scribeConnectOptions({}), /token/);
 });
 

@@ -182,6 +182,7 @@ class ElevenLabsSTTTokens(_ElevenLabsEngine):
             expires_in_seconds=900,
             extra={
                 "model_id": "scribe_v2_realtime",
+                "language_code": "en",
                 "vad_silence_threshold_secs": 0.7,
                 "include_timestamps": True,
             },

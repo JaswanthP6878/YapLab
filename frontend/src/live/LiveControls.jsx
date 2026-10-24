@@ -1,5 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PERSONAS } from '../data.js';
+
+// The backend's default qa_max_questions is not exposed in SessionInfo.
+const QA_LIMIT = 5;
+const VERDICT_LABEL = { answered: 'Answered', partial: 'Partly answered', dodged: 'Not answered' };
 
 const STATUS_TEXT = {
   idle: "Click Speak when you're ready. The room is listening.",
@@ -24,13 +28,20 @@ const cardStyle = { ...rowStyle, justifyContent: 'space-between', padding: '12px
 export default function LiveControls({ live }) {
   const [busy, setBusy] = useState(null);
   const [actionError, setActionError] = useState('');
+  const [verdict, setVerdict] = useState(null);
+  useEffect(() => {
+    setVerdict(live.latestVerdict || null);
+    if (!live.latestVerdict) return;
+    const timer = setTimeout(() => setVerdict(null), 6000);
+    return () => clearTimeout(timer);
+  }, [live.latestVerdict]);
   const phase = live.status;
   const presenting = phase === 'presenting';
   const qa = phase === 'qa';
   const active = live.activeQuestion;
   const pending = (live.hands || []).filter((hand) =>
     hand.questionId !== active?.questionId && (!hand.status || ['raised', 'pending'].includes(hand.status)));
-  const pooled = (live.hands || []).filter((hand) => hand.status === 'pooled').length;
+  const pooled = Math.min(QA_LIMIT, (live.hands || []).filter((hand) => hand.status === 'pooled').length);
   const error = actionError || messageFor(live.error);
 
   async function run(label, action, ...args) {
@@ -47,7 +58,7 @@ export default function LiveControls({ live }) {
       borderTop: '1px solid var(--line)', background: 'var(--board)', fontSize: 13 }}>
       <div style={{ ...rowStyle, justifyContent: 'space-between' }}>
         <p role="status" aria-live="polite" style={{ color: 'var(--chalk-2)' }}>
-          {busy ? `${busy}…` : STATUS_TEXT[phase] || 'Live classroom'}{pooled > 0 && ` ${pooled} saved for Q&A.`}
+          {busy ? `${busy}…` : STATUS_TEXT[phase] || 'Live classroom'}{pooled > 0 && ` ${pooled} ${pooled === 1 ? 'question' : 'questions'} ready for Q&A.`}
           {live.questionPlayback?.status === 'playing' && ' A student is speaking.'}{live.speech?.muted && ' Your microphone is paused for playback.'}
         </p>
         <div style={rowStyle}>
@@ -63,6 +74,9 @@ export default function LiveControls({ live }) {
           </>}
         </div>
       </div>
+      {verdict && <p role="status" aria-live="polite" style={{ color: 'var(--mint)', overflowWrap: 'anywhere' }}>
+        {nameFor(verdict.agentId)}: {VERDICT_LABEL[verdict.verdict] || verdict.verdict}: {verdict.comment}
+      </p>}
       {error && <p role="alert" style={{ color: 'var(--coral)', overflowWrap: 'anywhere' }}>{error}</p>}
       {active && (presenting || qa) && <div style={cardStyle}>
         <div style={{ flex: '1 1 260px' }}>

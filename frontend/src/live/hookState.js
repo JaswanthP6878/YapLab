@@ -57,3 +57,30 @@ export function createSlideSync({ canSend, request, onError = () => {} }) {
     synchronize,
   };
 }
+
+
+/** Keep another question's pool/lower event from hiding an actionable hand. */
+export function preserveRaisedHand(mapped, envelope, hands) {
+  if (!mapped) return mapped;
+  const data = envelope.data || {};
+  const ownHandEnds = ['hand_lowered', 'question_taken', 'qa_question'].includes(envelope.event);
+  const raised = Object.values(hands).find((hand) => hand.status === 'raised' && hand.listener === data.listener
+    && !(ownHandEnds && hand.questionId === data.question_id));
+  return raised ? { ...mapped, action: 'raise_hand', text: raised.question } : mapped;
+}
+
+/** Only an error's owning action may clear it as part of routine navigation. */
+export function createSessionErrors(publish) {
+  let current = null;
+  return {
+    show(problem, source = 'general') {
+      current = { source, message: problem?.message || String(problem) };
+      publish(current.message);
+    },
+    clear(source) {
+      if (source && current?.source !== source) return;
+      current = null;
+      publish(null);
+    },
+  };
+}
