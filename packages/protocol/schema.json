@@ -1,0 +1,803 @@
+{
+  "title": "FrontRow protocol",
+  "$defs": {
+    "AnswerDoneMessage": {
+      "additionalProperties": false,
+      "description": "The presenter finished answering; the asking listener judges the answer.",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Echoed back in the ack/error.",
+          "title": "Id"
+        },
+        "type": {
+          "const": "answer_done",
+          "title": "Type",
+          "type": "string"
+        },
+        "question_id": {
+          "title": "Question Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "question_id"
+      ],
+      "title": "AnswerDoneMessage",
+      "type": "object"
+    },
+    "EndPresentingMessage": {
+      "additionalProperties": false,
+      "description": "Presenting -> Q&A.",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Echoed back in the ack/error.",
+          "title": "Id"
+        },
+        "type": {
+          "const": "end_presenting",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "EndPresentingMessage",
+      "type": "object"
+    },
+    "EndQAMessage": {
+      "additionalProperties": false,
+      "description": "Q&A -> reporting.",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Echoed back in the ack/error.",
+          "title": "Id"
+        },
+        "type": {
+          "const": "end_qa",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "EndQAMessage",
+      "type": "object"
+    },
+    "FinishMessage": {
+      "additionalProperties": false,
+      "description": "Reporting -> ended.",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Echoed back in the ack/error.",
+          "title": "Id"
+        },
+        "type": {
+          "const": "finish",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "FinishMessage",
+      "type": "object"
+    },
+    "NextQuestionMessage": {
+      "additionalProperties": false,
+      "description": "Q&A: close the current answer and ask the next question.",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Echoed back in the ack/error.",
+          "title": "Id"
+        },
+        "type": {
+          "const": "next_question",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "NextQuestionMessage",
+      "type": "object"
+    },
+    "PingMessage": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Echoed back in the ack/error.",
+          "title": "Id"
+        },
+        "type": {
+          "const": "ping",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "PingMessage",
+      "type": "object"
+    },
+    "PlaybackEndedMessage": {
+      "additionalProperties": false,
+      "description": "Question audio finished playing.",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Echoed back in the ack/error.",
+          "title": "Id"
+        },
+        "type": {
+          "const": "playback_ended",
+          "title": "Type",
+          "type": "string"
+        },
+        "question_id": {
+          "title": "Question Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "question_id"
+      ],
+      "title": "PlaybackEndedMessage",
+      "type": "object"
+    },
+    "PlaybackStartedMessage": {
+      "additionalProperties": false,
+      "description": "Question audio started playing; the backend ignores mic input until ended.",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Echoed back in the ack/error.",
+          "title": "Id"
+        },
+        "type": {
+          "const": "playback_started",
+          "title": "Type",
+          "type": "string"
+        },
+        "question_id": {
+          "title": "Question Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "question_id"
+      ],
+      "title": "PlaybackStartedMessage",
+      "type": "object"
+    },
+    "SlideMessage": {
+      "additionalProperties": false,
+      "description": "The presenter moved to slide ``index`` (zero-based).",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Echoed back in the ack/error.",
+          "title": "Id"
+        },
+        "type": {
+          "const": "slide",
+          "title": "Type",
+          "type": "string"
+        },
+        "index": {
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "type",
+        "index"
+      ],
+      "title": "SlideMessage",
+      "type": "object"
+    },
+    "StartMessage": {
+      "additionalProperties": false,
+      "description": "Idle -> presenting. Starts the listeners' tick loop.",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Echoed back in the ack/error.",
+          "title": "Id"
+        },
+        "type": {
+          "const": "start",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "StartMessage",
+      "type": "object"
+    },
+    "TakeQuestionMessage": {
+      "additionalProperties": false,
+      "description": "The presenter calls on a raised (or pooled) question during the talk.",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Echoed back in the ack/error.",
+          "title": "Id"
+        },
+        "type": {
+          "const": "take_question",
+          "title": "Type",
+          "type": "string"
+        },
+        "question_id": {
+          "title": "Question Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "question_id"
+      ],
+      "title": "TakeQuestionMessage",
+      "type": "object"
+    },
+    "TranscriptMessage": {
+      "additionalProperties": false,
+      "description": "One FINAL speech-to-text segment (never partials).",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Echoed back in the ack/error.",
+          "title": "Id"
+        },
+        "type": {
+          "const": "transcript",
+          "title": "Type",
+          "type": "string"
+        },
+        "seq": {
+          "description": "Increasing per session; resends are ignored.",
+          "minimum": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "duration": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Spoken length in seconds, if known.",
+          "title": "Duration"
+        }
+      },
+      "required": [
+        "type",
+        "seq",
+        "text"
+      ],
+      "title": "TranscriptMessage",
+      "type": "object"
+    },
+    "ClientMessage": {
+      "discriminator": {
+        "mapping": {
+          "answer_done": "#/$defs/AnswerDoneMessage",
+          "end_presenting": "#/$defs/EndPresentingMessage",
+          "end_qa": "#/$defs/EndQAMessage",
+          "finish": "#/$defs/FinishMessage",
+          "next_question": "#/$defs/NextQuestionMessage",
+          "ping": "#/$defs/PingMessage",
+          "playback_ended": "#/$defs/PlaybackEndedMessage",
+          "playback_started": "#/$defs/PlaybackStartedMessage",
+          "slide": "#/$defs/SlideMessage",
+          "start": "#/$defs/StartMessage",
+          "take_question": "#/$defs/TakeQuestionMessage",
+          "transcript": "#/$defs/TranscriptMessage"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/StartMessage"
+        },
+        {
+          "$ref": "#/$defs/TranscriptMessage"
+        },
+        {
+          "$ref": "#/$defs/SlideMessage"
+        },
+        {
+          "$ref": "#/$defs/TakeQuestionMessage"
+        },
+        {
+          "$ref": "#/$defs/PlaybackStartedMessage"
+        },
+        {
+          "$ref": "#/$defs/PlaybackEndedMessage"
+        },
+        {
+          "$ref": "#/$defs/AnswerDoneMessage"
+        },
+        {
+          "$ref": "#/$defs/EndPresentingMessage"
+        },
+        {
+          "$ref": "#/$defs/NextQuestionMessage"
+        },
+        {
+          "$ref": "#/$defs/EndQAMessage"
+        },
+        {
+          "$ref": "#/$defs/FinishMessage"
+        },
+        {
+          "$ref": "#/$defs/PingMessage"
+        }
+      ]
+    },
+    "AckMessage": {
+      "properties": {
+        "type": {
+          "const": "ack",
+          "default": "ack",
+          "title": "Type",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "request": {
+          "title": "Request",
+          "type": "string"
+        },
+        "result": {
+          "additionalProperties": true,
+          "title": "Result",
+          "type": "object"
+        }
+      },
+      "required": [
+        "request"
+      ],
+      "title": "AckMessage",
+      "type": "object"
+    },
+    "ErrorMessage": {
+      "properties": {
+        "type": {
+          "const": "error",
+          "default": "error",
+          "title": "Type",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "request": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "title": "ErrorMessage",
+      "type": "object"
+    },
+    "EventOut": {
+      "description": "One timeline event. ``event`` names it; ``t`` is session-clock seconds.",
+      "properties": {
+        "type": {
+          "const": "event",
+          "default": "event",
+          "title": "Type",
+          "type": "string"
+        },
+        "event": {
+          "title": "Event",
+          "type": "string"
+        },
+        "t": {
+          "title": "T",
+          "type": "number"
+        },
+        "data": {
+          "additionalProperties": true,
+          "title": "Data",
+          "type": "object"
+        }
+      },
+      "required": [
+        "event",
+        "t",
+        "data"
+      ],
+      "title": "EventOut",
+      "type": "object"
+    },
+    "HelloMessage": {
+      "description": "First message after connecting. ``events`` is the backlog if ?replay=1.",
+      "properties": {
+        "type": {
+          "const": "hello",
+          "default": "hello",
+          "title": "Type",
+          "type": "string"
+        },
+        "session": {
+          "$ref": "#/$defs/SessionInfo"
+        },
+        "events": {
+          "items": {
+            "$ref": "#/$defs/EventOut"
+          },
+          "title": "Events",
+          "type": "array"
+        }
+      },
+      "required": [
+        "session"
+      ],
+      "title": "HelloMessage",
+      "type": "object"
+    },
+    "ListenerInfo": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "persona": {
+          "title": "Persona",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "persona"
+      ],
+      "title": "ListenerInfo",
+      "type": "object"
+    },
+    "SessionInfo": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        },
+        "preset": {
+          "title": "Preset",
+          "type": "string"
+        },
+        "current_slide": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Current Slide"
+        },
+        "listeners": {
+          "items": {
+            "$ref": "#/$defs/ListenerInfo"
+          },
+          "title": "Listeners",
+          "type": "array"
+        },
+        "slides": {
+          "items": {
+            "$ref": "#/$defs/Slide"
+          },
+          "title": "Slides",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "state",
+        "preset",
+        "current_slide",
+        "listeners",
+        "slides"
+      ],
+      "title": "SessionInfo",
+      "type": "object"
+    },
+    "Slide": {
+      "additionalProperties": true,
+      "description": "One page of the uploaded presentation.",
+      "properties": {
+        "index": {
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "text": {
+          "default": "",
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "index"
+      ],
+      "title": "Slide",
+      "type": "object"
+    },
+    "ServerMessage": {
+      "discriminator": {
+        "mapping": {
+          "ack": "#/$defs/AckMessage",
+          "error": "#/$defs/ErrorMessage",
+          "event": "#/$defs/EventOut",
+          "hello": "#/$defs/HelloMessage"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/HelloMessage"
+        },
+        {
+          "$ref": "#/$defs/EventOut"
+        },
+        {
+          "$ref": "#/$defs/AckMessage"
+        },
+        {
+          "$ref": "#/$defs/ErrorMessage"
+        }
+      ]
+    },
+    "CreateSessionRequest": {
+      "additionalProperties": false,
+      "description": "``POST /sessions`` body (slides as text; use /sessions/upload for a PDF).",
+      "properties": {
+        "preset": {
+          "default": "default",
+          "title": "Preset",
+          "type": "string"
+        },
+        "slides": {
+          "items": {
+            "$ref": "#/$defs/Slide"
+          },
+          "title": "Slides",
+          "type": "array"
+        },
+        "tick_interval_seconds": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Override the 15s default (1-300), e.g. for testing.",
+          "title": "Tick Interval Seconds"
+        }
+      },
+      "title": "CreateSessionRequest",
+      "type": "object"
+    }
+  }
+}

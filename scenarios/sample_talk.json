@@ -1,0 +1,33 @@
+{
+  "name": "sample_talk",
+  "description": "A short sample lecture used by offline orchestrator tests. Chunks carry the slide on screen; qa_answers are the presenter's scripted Q&A answers.",
+  "slides": [
+    {
+      "index": 0,
+      "text": "Introduction to distributed systems and the CAP theorem overview"
+    },
+    {
+      "index": 1,
+      "text": "Consistency, availability, and partition tolerance trade-offs in practice"
+    }
+  ],
+  "chunks": [
+    { "start": 0.0, "end": 4.0, "text": "Today we are going to talk about distributed systems and why they are hard.", "slide": 0 },
+    { "start": 4.0, "end": 8.0, "text": "The core idea is that nodes communicate over an unreliable network.", "slide": 0 },
+    { "start": 8.0, "end": 12.0, "text": "The CAP theorem says you can only pick two of consistency, availability, and partition tolerance.", "slide": 0 },
+    { "start": 12.0, "end": 16.0, "text": "In practice partitions do happen, so you really choose between consistency and availability.", "slide": 1 },
+    { "start": 16.0, "end": 20.0, "text": "A strongly consistent system refuses writes when it cannot reach a quorum of replicas.", "slide": 1 },
+    { "start": 20.0, "end": 24.0, "text": "An available system keeps accepting writes and reconciles conflicts later on.", "slide": 1 },
+    { "start": 24.0, "end": 28.0, "text": "Eventual consistency means replicas converge once the network heals between them.", "slide": 1 },
+    { "start": 28.0, "end": 32.0, "text": "Vector clocks and version vectors help us detect concurrent updates across nodes.", "slide": 1 },
+    { "start": 32.0, "end": 36.0, "text": "Quorum reads and writes let us tune the balance between latency and consistency.", "slide": 1 },
+    { "start": 36.0, "end": 40.0, "text": "We will finish with a look at how real databases apply these ideas in production.", "slide": 1 }
+  ],
+  "qa_answers": [
+    "Good question. Partitions do happen on any real network, so during a partition the practical choice is between consistency and availability.",
+    "Eventual consistency means the replicas converge once the network heals, and version vectors help detect concurrent updates.",
+    "Let's take that one offline.",
+    "Quorum reads and writes let you tune latency against consistency by choosing how many replicas must respond.",
+    "Real databases like Cassandra and Spanner make different trade-offs here."
+  ]
+}

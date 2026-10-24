@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "frontrow"
+version = "0.1.0"
+description = "FrontRow: a practice classroom full of AI students (orchestration core)"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.162.0",
+    "pydantic>=2",
+    "pypdf>=6.21.2",
+    "python-multipart>=0.0.32",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.optional-dependencies]
+# Installed on demand for the real LLM client: uv sync --extra openai
+openai = [
+    "openai>=1.0",
+]
+
+# Dev-only tooling, managed by uv's dependency groups (uv sync includes these
+# by default). Add linters/formatters here as the project grows.
+[dependency-groups]
+dev = [
+    "httpx2>=2.16.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["frontrow*"]
