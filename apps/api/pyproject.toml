@@ -11,8 +11,10 @@ dependencies = [
     "fastapi>=0.162.0",
     "pydantic>=2",
     "pypdf>=6.21.2",
+    "python-dotenv>=1.2.4",
     "python-multipart>=0.0.32",
     "uvicorn[standard]>=0.54.0",
+    "websockets>=17.3",
 ]
 
 [project.optional-dependencies]

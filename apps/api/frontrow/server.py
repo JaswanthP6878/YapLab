@@ -33,6 +33,7 @@ from .config import Config
 from .llm.base import LLMClient
 from .llm.fake import FakeLLM
 from .llm.fallback import FallbackLLM
+from .llm.openai_client import PROVIDERS, OpenAIClient
 from .metrics import filler_count, longest_pause, speaking_rate, word_count
 from .models import SessionState, Slide, TimelineEvent
 from .personas import ROOM_PRESETS
@@ -64,15 +65,15 @@ _CLIENT_QUEUE_MAX = 1000
 
 
 def llm_from_env() -> Callable[[], LLMClient]:
-    """LLM factory from ``FRONTROW_LLM`` (``fake`` or ``openai``)."""
+    """LLM factory from ``FRONTROW_LLM`` (``fake``, ``deepseek``, or ``openai``)."""
     kind = os.environ.get("FRONTROW_LLM", "fake").strip() or "fake"
     if kind == "fake":
         return FakeLLM
-    if kind == "openai":
-        from .llm.openai_client import OpenAIClient
-
-        return lambda: FallbackLLM(OpenAIClient())
-    raise RuntimeError(f"unknown FRONTROW_LLM: {kind!r} (use fake or openai)")
+    if kind in PROVIDERS:
+        return lambda: FallbackLLM(OpenAIClient(provider=kind))
+    raise RuntimeError(
+        f"unknown FRONTROW_LLM: {kind!r} (use fake, {', '.join(PROVIDERS)})"
+    )
 
 
 def speech_engines_from_env() -> tuple[TTSEngine, STTTokenProvider]:

@@ -27,6 +27,12 @@ PROPENSITY_MARKER = "QUESTION_PROPENSITY:"
 ANSWER_MARKER = "[[FRONTROW_ANSWER]]"
 ANSWER_BEGIN = "[[ANSWER_TEXT_BEGIN]]"
 ANSWER_END = "[[ANSWER_TEXT_END]]"
+SUMMARY_MARKER = "[[FRONTROW_SUMMARY]]"
+PREVIOUS_SUMMARY_BEGIN = "[[PREVIOUS_SUMMARY_BEGIN]]"
+PREVIOUS_SUMMARY_END = "[[PREVIOUS_SUMMARY_END]]"
+NEW_SPEECH_BEGIN = "[[NEW_SPEECH_BEGIN]]"
+NEW_SPEECH_END = "[[NEW_SPEECH_END]]"
+NO_SUMMARY_YET = "(none yet)"
 
 _SOURCE_RE = re.compile(
     re.escape(SOURCE_BEGIN) + r"(.*?)" + re.escape(SOURCE_END), re.DOTALL
@@ -37,6 +43,13 @@ _SLIDE_LABEL_RE = re.compile(r"^\[slide [^\]]*\]\s*")
 _WORD_SPAN_RE = re.compile(r"\S+")
 _ANSWER_RE = re.compile(
     re.escape(ANSWER_BEGIN) + r"(.*?)" + re.escape(ANSWER_END), re.DOTALL
+)
+_PREVIOUS_SUMMARY_RE = re.compile(
+    re.escape(PREVIOUS_SUMMARY_BEGIN) + r"(.*?)" + re.escape(PREVIOUS_SUMMARY_END),
+    re.DOTALL,
+)
+_NEW_SPEECH_RE = re.compile(
+    re.escape(NEW_SPEECH_BEGIN) + r"(.*?)" + re.escape(NEW_SPEECH_END), re.DOTALL
 )
 _ASKED_RE = re.compile(r"You asked: (.*)\nIt was about: \"(.*)\"")
 _CONTENT_WORD_RE = re.compile(r"[a-z0-9']{4,}")
@@ -95,6 +108,8 @@ class FakeLLM(LLMClient):
             return self._reaction_response(system, user, model)
         if ANSWER_MARKER in combined:
             return self._answer_response(system, user, model)
+        if SUMMARY_MARKER in combined:
+            return self._summary_response(user)
         # Generic deterministic echo for non-reaction prompts.
         d = _digest(system, user, model)
         return json.dumps({"echo": d % 1_000_000})
@@ -145,6 +160,23 @@ class FakeLLM(LLMClient):
                 payload["quote"] = quote
 
         return json.dumps(payload)
+
+    @staticmethod
+    def _summary_response(user: str) -> str:
+        """Append the first words of each new sentence to the previous summary."""
+        prev_match = _PREVIOUS_SUMMARY_RE.search(user)
+        new_match = _NEW_SPEECH_RE.search(user)
+        previous = prev_match.group(1).strip() if prev_match else ""
+        if previous == NO_SUMMARY_YET:
+            previous = ""
+        new = new_match.group(1).strip() if new_match else ""
+        gist = " ".join(
+            " ".join(sentence.split()[:8])
+            for sentence in re.split(r"(?<=[.!?])\s+", new)
+            if sentence.strip()
+        )
+        summary = f"{previous} {gist}".strip()
+        return json.dumps({"summary": summary[-800:]})
 
     def _answer_response(self, system: str, user: str, model: str) -> str:
         """Judge an answer by how much of the question's content it covers.

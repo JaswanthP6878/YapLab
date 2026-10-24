@@ -8,9 +8,10 @@ Offline (default, deterministic):
     cd apps/api
     uv run python demo.py --print-timeline
 
-Live, using the real OpenAI API (needs OPENAI_API_KEY in the environment):
+Live, using DeepSeek (needs DEEPSEEK_API_KEY in the environment):
 
-    uv run --extra openai python demo.py --llm openai --model gpt-4o-mini
+    uv run --extra openai python demo.py --llm deepseek     # default model deepseek-flash
+    uv run --extra openai python demo.py --llm deepseek --model deepseek-v4-pro
 """
 
 from frontrow.replay import main

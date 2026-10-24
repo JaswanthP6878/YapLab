@@ -93,6 +93,7 @@ class Session:
             moderator=self.moderator,
             slides=self.slides,
             event_sink=event_sink,
+            summarizer=llm,
         )
         if isinstance(llm, FallbackLLM):
             llm.on_fallback = lambda reason: self._record("llm_fallback", reason=reason)
@@ -183,6 +184,9 @@ class Session:
         hand = self.moderator.next_qa(self._clock.now())
         if hand is not None:
             self.orchestrator.record_hand("qa_question", hand)
+            self.listeners[hand.listener_id].update_question(
+                hand.question_id, "being asked now in Q&A"
+            )
             self._answer = _OpenAnswer(hand)
         return hand
 
@@ -272,6 +276,9 @@ class Session:
         if hand is None:
             raise SessionError(f"unknown question {question_id!r}")
         self.orchestrator.record_hand("question_taken", hand)
+        self.listeners[hand.listener_id].update_question(
+            hand.question_id, "the presenter called on you; being answered now"
+        )
         self._answer = _OpenAnswer(hand)
         return hand
 
@@ -328,6 +335,10 @@ class Session:
             )
             return
         self.verdicts.append(verdict)
+        status = f"asked; you judged the answer {verdict.verdict}"
+        if verdict.comment:
+            status += f": {verdict.comment}"
+        listener.update_question(hand.question_id, status)
         self._record(
             "answer_verdict",
             question_id=hand.question_id,
@@ -355,3 +366,8 @@ class Session:
         )
         raised = self.moderator.add_follow_up(follow, self._clock.now())
         self.orchestrator.record_hand("hand_raised" if raised else "pooled", follow)
+        listener.note_question(
+            follow.question_id,
+            follow.question.question,
+            "follow-up raised, not asked yet" if raised else "follow-up saved for Q&A",
+        )

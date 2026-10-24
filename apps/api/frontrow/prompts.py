@@ -10,11 +10,17 @@ from .llm.fake import (
     ANSWER_BEGIN,
     ANSWER_END,
     ANSWER_MARKER,
+    NEW_SPEECH_BEGIN,
+    NEW_SPEECH_END,
+    NO_SUMMARY_YET,
     PERSONA_MARKER,
+    PREVIOUS_SUMMARY_BEGIN,
+    PREVIOUS_SUMMARY_END,
     PROPENSITY_MARKER,
     REACTION_MARKER,
     SOURCE_BEGIN,
     SOURCE_END,
+    SUMMARY_MARKER,
 )
 from .models import Persona, Reaction, Slide
 
@@ -41,6 +47,29 @@ ANSWER_SYSTEM = (
 )
 
 
+SUMMARY_SYSTEM = (
+    "You keep running notes on a live presentation for an audience of "
+    "students. Respond ONLY with a JSON object: {\"summary\": \"...\"}. "
+    "Update the previous notes with the new speech: keep, in order, the "
+    "topics covered, the key claims, definitions, and numbers the presenter "
+    "stated, and anything they promised to explain later. Under 150 words. "
+    f"{SUMMARY_MARKER}"
+)
+
+
+def _question_lines(questions: list[dict[str, str]]) -> str:
+    """List the listener's own earlier questions and what happened to them."""
+    if not questions:
+        return ""
+    lines = [f'- "{q["question"]}" ({q["status"]})' for q in questions]
+    return (
+        "Questions you already raised. Do not ask these again; only ask "
+        "something new, or follow up if an answer left you unsatisfied.\n"
+        + "\n".join(lines)
+        + "\n\n"
+    )
+
+
 def _memory_lines(memory: list[Reaction]) -> str:
     """Summarize a listener's recent reactions for its prompt."""
     if not memory:
@@ -63,6 +92,8 @@ def build_reaction_prompt(
     *,
     current_slide: int | None = None,
     memory: list[Reaction] | None = None,
+    questions: list[dict[str, str]] | None = None,
+    talk_summary: str = "",
 ) -> tuple[str, str]:
     """Build ``(system, user)`` prompts for a reaction request.
 
@@ -71,6 +102,8 @@ def build_reaction_prompt(
     deterministic FakeLLM can produce real grounded output, while remaining a
     perfectly reasonable prompt for a real model. Slides up to and including
     ``current_slide`` are shown, with the current one marked as on screen.
+    ``talk_summary`` covers the whole talk so far, beyond the recent window,
+    and ``questions`` are the listener's own earlier questions.
     """
     visible = [
         s
@@ -90,11 +123,24 @@ def build_reaction_prompt(
         f"Persona: {persona.description}\n"
         f"{PROPENSITY_MARKER} {persona.question_propensity}\n\n"
         f"{_memory_lines(memory or [])}\n\n"
-        "Here is the most recent part of the talk (and slides shown so far). "
+        f"{_question_lines(questions or [])}"
+        + (f"The talk so far, in brief: {talk_summary}\n\n" if talk_summary else "")
+        + "Here is the most recent part of the talk (and slides shown so far). "
         "React as your persona would.\n\n"
         f"{SOURCE_BEGIN}\n{source_text}\n{SOURCE_END}\n"
     )
     return REACTION_SYSTEM, user
+
+
+def build_summary_prompt(previous: str, new_speech: str) -> tuple[str, str]:
+    """Build ``(system, user)`` prompts to fold new speech into the talk notes."""
+    user = (
+        "Previous notes:\n"
+        f"{PREVIOUS_SUMMARY_BEGIN}\n{previous or NO_SUMMARY_YET}\n{PREVIOUS_SUMMARY_END}\n\n"
+        "New speech since then:\n"
+        f"{NEW_SPEECH_BEGIN}\n{new_speech}\n{NEW_SPEECH_END}\n"
+    )
+    return SUMMARY_SYSTEM, user
 
 
 def build_answer_prompt(
