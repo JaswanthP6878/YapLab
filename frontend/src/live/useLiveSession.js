@@ -4,15 +4,17 @@ import { API_URL, createApiClient } from './client.js';
 import { createAmbience } from './ambience.js';
 import { createQuestionAudio } from './questionAudio.js';
 import { agentIdFor, buildListenerMap, eventMetadata, listenerMetadata, mapAgentEvent, mapListenerMeters, mapRoomGauge } from './mapEvents.js';
-import { demoDeckSlides, updateHands } from './sessionState.js';
+import { demoDeckSlides } from './sessionState.js';
+import { applyHandEvent, createDebugHistory, createSlideSync } from './hookState.js';
 import { useScribeSpeech } from './useScribeSpeech.js';
 
 /**
  * Teaching-only bridge. `enabled` lets a caller mount this hook beside demo hooks
  * without creating a backend session. Configuration is captured when enabled;
- * voices/noise can change during a session without recreating it.
+ * voices/noise can change during a session without recreating it. Diagnostic
+ * event/ack arrays publish React state only when debugLogs is explicitly enabled.
  */
-export function useLiveSession({ config, onAgentEvent, onTranscript, enabled = true }) {
+export function useLiveSession({ config, onAgentEvent, onTranscript, enabled = true, debugLogs = false }) {
   const [phase, setPhase] = useState('idle');
   const [connectionState, setConnectionState] = useState('closed');
   const [sessionId, setSessionId] = useState(null);
@@ -28,16 +30,23 @@ export function useLiveSession({ config, onAgentEvent, onTranscript, enabled = t
   const [transcriptAcks, setTranscriptAcks] = useState([]);
   const [error, setError] = useState(null);
   const [report, setReport] = useState(null);
+  const diagnostics = useRef(null);
+  if (!diagnostics.current) diagnostics.current = createDebugHistory({ onEvents: setEvents, onAcks: setTranscriptAcks });
   const latest = useRef({});
   latest.current = { config, onAgentEvent, onTranscript };
   const runtime = useRef(null);
   const speechRef = useRef(null);
   const speech = useScribeSpeech((text) => latest.current.onTranscript?.(text), {
     sessionId, connection, connectionState, enabled,
-    onAck: (ack) => setTranscriptAcks((previous) => [...previous.slice(-99), ack]),
+    onAck: (ack) => diagnostics.current.addAck(ack),
     onError: (message) => setError(message),
   });
   speechRef.current = speech;
+
+  useEffect(() => {
+    diagnostics.current.setEnabled(debugLogs && enabled);
+    return () => diagnostics.current.setEnabled(false);
+  }, [debugLogs, enabled]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -48,11 +57,12 @@ export function useLiveSession({ config, onAgentEvent, onTranscript, enabled = t
     const abort = new AbortController();
     const api = createApiClient();
     const run = { alive: true, api, socket: null, id: null, phase: 'idle', handMap: {}, listenerMap: {}, active: null,
-      audio: null, ambience: null, unsubscribers: [], maxSequence: -1, floorId: null, speakingListener: null, starting: null };
+      audio: null, ambience: null, unsubscribers: [], maxSequence: -1, floorId: null, speakingListener: null, starting: null,
+      transportConnected: false, connectedOnce: false, transportVersion: 0, slideSync: null };
     runtime.current = run;
     const fail = (value) => { if (run.alive) setError(value?.message || String(value)); };
     const changePhase = (value) => { run.phase = value; if (run.alive) setPhase(value); };
-    const publishHands = () => setHands(Object.values(run.handMap).map((hand) => ({ ...hand,
+    const publishHands = (handMap) => setHands(Object.values(handMap).map((hand) => ({ ...hand,
       agentId: agentIdFor(hand.listener, hand.persona, run.listenerMap) })));
     const emit = (event) => { if (event && run.alive) latest.current.onAgentEvent?.(event); };
     const request = async (type, fields) => {
@@ -61,6 +71,11 @@ export function useLiveSession({ config, onAgentEvent, onTranscript, enabled = t
       if (type === 'playback_ended' && run.floorId === fields.question_id) run.floorId = null;
       return result;
     };
+    run.slideSync = createSlideSync({
+      canSend: () => run.alive && run.transportConnected && ['idle', 'presenting', 'qa'].includes(run.phase),
+      request: (type, fields) => run.socket.request(type, fields),
+      onError: fail,
+    });
     run.ambience = createAmbience();
     run.audio = createQuestionAudio({ request, apiBase: API_URL, speak, stopSpeaking,
       setMuted: (value) => speechRef.current?.setMuted(value),
@@ -76,12 +91,13 @@ export function useLiveSession({ config, onAgentEvent, onTranscript, enabled = t
     });
     run.audio.enableVoices(latest.current.config.voices !== false);
     if (latest.current.config.noise && latest.current.config.voices !== false) run.ambience.start();
-    setError(null); setReport(null); setEvents([]); setTranscriptAcks([]); setHands([]); setAgents({}); setRoom(null); setActiveQuestion(null);
+    diagnostics.current.clear();
+    setError(null); setReport(null); setHands([]); setAgents({}); setRoom(null); setActiveQuestion(null);
     setQuestionPlayback(null); setPhase('connecting'); setConnectionState('connecting');
 
     function handleEvent(envelope) {
       if (!run.alive) return;
-      setEvents((previous) => [...previous.slice(-299), envelope]);
+      diagnostics.current.addEvent(envelope);
       const { event, data } = envelope;
       run.audio.handleEvent(envelope); // cache even during replay; never autoplay history
       if (event === 'state') changePhase(data.state);
@@ -89,8 +105,7 @@ export function useLiveSession({ config, onAgentEvent, onTranscript, enabled = t
         run.maxSequence = Math.max(run.maxSequence, data.seq);
         speechRef.current?.adoptSequence(data.seq);
       }
-      run.handMap = updateHands(run.handMap, envelope);
-      publishHands();
+      run.handMap = applyHandEvent(run.handMap, envelope, publishHands);
       const metadata = eventMetadata(envelope, run.listenerMap);
       if (event === 'question_taken' || event === 'qa_question') {
         run.active = { ...data, ...metadata, status: 'taken' };
@@ -142,6 +157,10 @@ export function useLiveSession({ config, onAgentEvent, onTranscript, enabled = t
       setConnection(socket);
       run.unsubscribers.push(socket.onState(async (state) => {
         if (!run.alive) return;
+        const version = ++run.transportVersion;
+        const reconnect = state === 'connected' && run.connectedOnce;
+        run.transportConnected = state === 'connected';
+        if (state === 'connected') run.connectedOnce = true;
         if (state === 'reconnecting' || state === 'closed') run.audio.clear({ notify: false });
         // Clear a playback floor left on the server by a severed socket before
         // Scribe resumes; otherwise genuine answers can be dropped for 30 seconds.
@@ -149,7 +168,10 @@ export function useLiveSession({ config, onAgentEvent, onTranscript, enabled = t
           try { await request('playback_ended', { question_id: run.floorId }); }
           catch (problem) { fail(problem); return; }
         }
-        if (run.alive) setConnectionState(state);
+        // Preserve local navigation made while offline; hello's current_slide may
+        // be older. Re-send before Scribe resumes, without replaying start.
+        if (reconnect) await run.slideSync.synchronize();
+        if (run.alive && version === run.transportVersion) setConnectionState(state);
       }), socket.onError(fail), socket.onEvent(handleEvent), socket.onHello((hello) => {
         run.listenerMap = buildListenerMap(hello.session.listeners);
         setListeners(listenerMetadata(hello.session.listeners));
@@ -160,7 +182,7 @@ export function useLiveSession({ config, onAgentEvent, onTranscript, enabled = t
       }));
       await socket.ready;
       if (!run.alive) return;
-      await socket.request('slide', { index: 0 });
+      await run.slideSync.synchronize();
       if (!run.alive) return;
       // Track an in-flight start so exit cannot close the socket before stopping
       // a start that the server may already have processed.
@@ -210,7 +232,12 @@ export function useLiveSession({ config, onAgentEvent, onTranscript, enabled = t
   }, []);
   const callOn = useCallback((questionId) => request('take_question', { question_id: questionId }), [request]);
   const answerDone = useCallback((questionId) => request('answer_done', { question_id: questionId }), [request]);
-  const setSlide = useCallback((index) => request('slide', { index }), [request]);
+  const setSlide = useCallback((index) => {
+    const run = runtime.current;
+    if (!run?.alive) return Promise.resolve(null);
+    setError(null);
+    return run.slideSync.select(index);
+  }, []);
   const endTalk = useCallback(() => request('end_presenting'), [request]);
   const nextQuestion = useCallback(() => request('next_question'), [request]);
   const finishQA = useCallback(async () => {
@@ -228,6 +255,7 @@ export function useLiveSession({ config, onAgentEvent, onTranscript, enabled = t
   const resumeAudio = useCallback(() => { runtime.current?.audio.resume(); runtime.current?.ambience.resume(); }, []);
   return { status: ['connecting', 'reconnecting'].includes(connectionState) ? connectionState : phase,
     connectionState, sessionId, speech, agents, hands, listeners, room, activeQuestion, error,
-    events, transcriptAcks, audioBlocked, questionPlayback, resumeAudio, callOn, answerDone, setSlide, endTalk,
+    events: debugLogs ? events : [], transcriptAcks: debugLogs ? transcriptAcks : [],
+    audioBlocked, questionPlayback, resumeAudio, callOn, answerDone, setSlide, endTalk,
     nextQuestion, finishQA, report, submitText: speech.sendText };
 }

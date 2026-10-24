@@ -1,104 +1,133 @@
 # Live teaching bridge
 
-The new bridge talks to the team backend directly. It does not use `lib/api.js`.
-Provider credentials stay in the backend's ignored root `.env`; only a short-lived
-Scribe token reaches the browser.
+The bridge connects the Teaching UI to the backend on `main`. Its contract is
+[docs/backend-interface.md](../../../docs/backend-interface.md); `lib/api.js`
+is an older draft contract and is not used here. Provider credentials stay in
+the backend's ignored root `.env`; only a short-lived Scribe token reaches the
+browser.
 
 ## Run
 
-The voice backend (PR #1) is on `main`. From `apps/api`:
+From the repository root, create `.env` from `.env.example` if needed. For live
+Claude and ElevenLabs, set these values there:
+
+```dotenv
+FRONTROW_LLM=anthropic
+ANTHROPIC_API_KEY=your_claude_key
+FRONTROW_LLM_MODEL=
+FRONTROW_TTS=elevenlabs
+FRONTROW_STT=elevenlabs
+ELEVENLABS_API_KEY=your_elevenlabs_key
+```
+
+Start the backend from `apps/api`:
 
 ```sh
+cd apps/api
 uv sync --extra elevenlabs --extra anthropic
-FRONTROW_LLM=fake FRONTROW_TTS=elevenlabs FRONTROW_STT=elevenlabs FRONTROW_TICK_INTERVAL_SECONDS=5 uv run uvicorn frontrow.server:app --host 127.0.0.1 --port 8000
+uv run uvicorn frontrow.server:app --env-file ../../.env --host 127.0.0.1 --port 8000
 ```
 
-For Claude, set `FRONTROW_LLM=anthropic` and provide `ANTHROPIC_API_KEY` in that
-backend root `.env`. Supply `ELEVENLABS_API_KEY` there for both voice providers.
-The frontend needs no provider API keys.
+The default tick interval is 15 seconds. Leave `FRONTROW_TICK_INTERVAL_SECONDS`
+unset to use it. For an offline LLM with real voice, prefix the server command
+with `FRONTROW_LLM=fake`. The frontend needs no provider API keys.
 
-From `frontend/`:
+In a second terminal, from the repository root:
 
 ```sh
+cd frontend
 npm ci
-# Put VITE_API_URL=http://127.0.0.1:8000 in frontend/.env.local (keep it untracked).
-npm run dev:live -- --host 127.0.0.1
+# Create .env.local here with VITE_API_URL=http://127.0.0.1:8000 (keep it untracked).
+npm run dev
 ```
 
-Open `/live-test.html` for the test bench or `/` for the product UI.
-`npm run dev -- --host 127.0.0.1` is equivalent.
+Vite loads `frontend/vite.config.js`. Open `/` for the product UI or
+`/live-test.html` for the test bench. Remove `VITE_API_URL` and restart Vite for
+the scripted demo. Only Teaching uses the live backend; Pitch and Interview
+keep their demo behavior even when an API URL is configured.
 
-Use headphones. Start the session, enable audio, start the microphone, then speak
-with pauses. Captions are committed only after `accepted: true`. The bench also
-accepts typed transcripts through the same increasing sequence counter. Call on
-a raised hand, wait for playback to end, answer, then choose Done answering. End
-talk enters Q&A; Next question walks the pool; Finish retrieves the real report.
+Use headphones. Start a session, enable audio, start the microphone, then speak
+with pauses. Final captions appear only after a transcript ack has
+`accepted: true`. The bench also accepts typed transcripts through the same
+increasing sequence counter. Call on a raised hand, wait for playback to end,
+answer, then choose Done answering. End talk enters Q&A; Next question walks
+the pool; Finish retrieves the backend report. Back to setup → Last report
+reopens that same live report.
+
 The browser can require an Enable audio click after an autoplay rejection.
-Room ambience starts off in the bench and has its own checkbox. It is separate
-from student question voices; silence until Call on / Next question is expected.
+Room ambience starts off in the bench and has its own checkbox. Student voices
+play after Call on / Next question. Sounds follow Vite's `BASE_URL`, including
+deployments under a URL prefix.
 
-## Session wiring (separate commit)
+## Session wiring
 
-The second commit only edits `screens/Session.jsx`. Its essential wiring is:
+The product mounts the live hook beside its existing demo hooks and selects it
+only for Teaching with a configured API URL. The essential wiring is:
 
 ```jsx
 const liveMode = Boolean(API_URL) && config.mode === 'teaching';
-config = useMemo(() => liveMode ? makeLiveConfig(config) : config, [config, liveMode]);
 const live = useLiveSession({ config: { ...config, voices }, enabled: liveMode,
-  onTranscript: (text) => dispatch({ type: 'USER_SAY', text }),
-  onAgentEvent: (event) => { const action = agentEventToAction(event); if (action) dispatch(action); },
+  onTranscript: (text) => dispatch({ type: 'LIVE_SAY', text }),
+  onAgentEvent: (event) => {
+    const action = agentEventToAction(event);
+    if (action) dispatch(action);
+  },
 });
 const demoSpeech = useSpeechRecognition(respond);
 const speech = liveMode ? live.speech : demoSpeech;
-// respond: liveMode ? live.submitText(text) : existing demo behavior
-// STEP effect: return immediately in liveMode
-// Transcript speech effect: skip speak() in liveMode
-// Slide navigation: live.setSlide(index), then update the existing page state
-// Raised avatar: live.callOn(live.hands.find(hand => hand.agentId === id && hand.status === 'raised').questionId)
-// End: live.endTalk(); Q&A controls use nextQuestion/answerDone/finishQA
-// <LiveControls live={live} />; real report: <LiveReport report={live.report} onExit={onExit} />
+// Live text: live.submitText(text); skip STEP, fake replies, and speak().
+// Slides: update the page locally, then send live.setSlide(index).
+// Call on: live.callOn(questionId); then live.answerDone(questionId).
+// Q&A: live.endTalk(), live.nextQuestion(), live.finishQA().
+// Completion: onEnd({ kind: 'live', report: live.report, config }).
 ```
 
-Remove `VITE_API_URL` and restart Vite to use the unchanged scripted demo. Pitch
-and interview remain scripted even with an API URL. The default live classroom
-uses Alex, Maya, Ana, Sam and Priya, matching backend L0–L4. Configured custom
-audiences, question frequency and seriousness are not supported by this preset.
+`LIVE_SAY` appends presenter text without changing student states, raised hands,
+or question/verdict bubbles. The backend changes those states on later events.
+App stores live reports in a `{ kind: 'live', report, config }` envelope and
+renders `LiveReport` when Last report is opened. Demo reports keep their existing
+format. Slides update locally before network acknowledgement; the current slide
+is re-sent after a reconnect.
+
+The default live classroom uses Alex, Maya, Ana, Sam and Priya, matching backend
+L0–L4. Custom audiences, question frequency and seriousness are not supported
+by this fixed preset.
 
 ## Boundaries and recovery
 
 - PDF decks are fetched from the UI's blob URL and uploaded for text extraction.
-  Image decks are rejected with a message rather than silently teaching from a
-  different demo deck. With no upload, only slide titles and bullet points are
-  sent, never the demo's scripted presenter lines.
-- The backend owns meters, question grounding, answer verdicts, and delivery
-  metrics. The product's live report renders that actual report; it does not
-  fabricate the scripted engine's richer scores. The existing demo reducer still
-  renders the room and keeps its local transcript; its hidden demo metrics are
-  not used for the live report. Live reports are not saved into App's demo
-  last-report storage because that would require changing another owned file.
-- Reconnect requests a full replay, rebuilds hands/meters and advances sequence
-  numbers without replaying old voices or room sounds. Pending requests reject
-  rather than being resent. A backend restart loses in-memory sessions; leave
-  and start another session when the bridge reports an unknown session.
-- Active audio owns mic muting and backend playback messages; browser speech is
-  the fallback on synthesis failure or a five-second missing-audio timeout.
-  Turning voices off cancels audio; question text remains visible.
-- A session closes through Q&A/reporting on exit. The backend has no HTTP cancel
+  Image decks show an unsupported message. With no upload, only slide titles
+  and bullet points are sent, never the demo's scripted presenter lines.
+- The backend owns meters, grounding, answer verdicts, and delivery metrics.
+  Live reports show that report instead of the demo engine's richer scores.
+  The heatmap and top improvements are not in the backend's v0 report yet.
+- Reconnect rebuilds hands/meters and advances sequence numbers from replay
+  without replaying old voices or room sounds. Pending requests reject rather
+  than being resent. A backend restart loses in-memory sessions; leave and
+  start another session if the session is no longer available.
+- Active audio owns mic muting and backend playback messages. Browser speech
+  is the fallback on synthesis failure or a five-second missing-audio timeout.
+  Turning voices off cancels audio while keeping question text visible.
+- Calling on a hand within roughly 0.7 seconds of finishing a sentence can
+  drop that last sentence: its delayed final may arrive during playback. This
+  requires a backend change; allow the caption to commit before Call on.
+- The bench opts into event and transcript-ack logs. The product keeps those
+  diagnostics out of its render updates.
+- Exit closes the session through Q&A/reporting. The backend has no HTTP cancel
   endpoint, so a severed socket during teardown cannot guarantee cancellation.
-- The existing Pause control has no server pause equivalent; live wiring hides
-  it. Camera is the teammate's local self-view only, with no visual analysis.
-- The existing home badge uses the API URL globally, even though only Teaching
-  is live. This bridge deliberately leaves that teammate-owned UI unchanged.
+- The backend has no pause command; the live UI hides the demo's Pause control.
+  Camera remains the local self-view, with no visual analysis.
 
 ## Checks
+
+From `frontend`:
 
 ```sh
 npm run test:live
 npm run build
 ```
 
-`build:live` is also available. `frontend/dist` and `node_modules` are
-git-ignored; never stage them. Tests cover transport correlation/replay, persona mapping,
-Scribe sequence/duration and mute filtering, audio FIFO/fallback lifetime and
-ambience throttles. Hardware microphone and audible voice quality require a
-browser check; mocked SDK events alone do not establish them.
+Tests cover transport correlation/replay, persona mapping, live reducer state,
+Scribe sequence/duration and mute filtering, audio FIFO/fallback lifetime,
+ambience throttles, and prefixed sound URLs. Microphone capture and audible
+voice quality still require a browser check.

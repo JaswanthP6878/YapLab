@@ -3,6 +3,7 @@ import Home from './screens/Home.jsx';
 import Setup from './screens/Setup.jsx';
 import Session from './screens/Session.jsx';
 import Report from './screens/Report.jsx';
+import LiveReport from './live/LiveReport.jsx';
 import InterviewComingSoon from './screens/InterviewComingSoon.jsx';
 import { PERSONAS } from './data.js';
 import { defaultConfig } from './lib/config.js';
@@ -26,6 +27,7 @@ export default function App() {
   const [roster, setRoster] = useState(PERSONAS);
   const [config, setConfig] = useState(() => defaultConfig('teaching'));
   const [result, setResult] = useState(null);
+  const headerLive = view === 'report' && result ? result.kind === 'live' : !isDemo && config.mode === 'teaching';
 
   const go = (v) => {
     setView(v);
@@ -74,8 +76,8 @@ export default function App() {
                 </button>
               ))}
             </nav>
-            <span className={`mode-chip ${isDemo ? 'demo' : 'live'}`} title={isDemo ? 'Agent behavior is simulated by the built-in demo engine. Set VITE_API_URL to connect the backend.' : 'Connected to backend'}>
-              <i />{isDemo ? 'Simulated agents' : 'Backend live'}
+            <span className={`mode-chip ${headerLive ? 'live' : 'demo'}`} title={headerLive ? 'Teaching uses the configured backend.' : 'Agent behavior is simulated by the built-in demo engine.'}>
+              <i />{headerLive ? 'Backend live' : 'Simulated agents'}
             </span>
           </div>
         </header>
@@ -102,14 +104,16 @@ export default function App() {
           onEnd={(r) => { setResult(r); go('report'); }}
         />
       )}
-      {view === 'report' && result && (
+      {view === 'report' && result && (result.kind === 'live' ? (
+        <LiveReport report={result.report} onExit={() => { setConfig(result.config); go('setup'); }} />
+      ) : (
         <Report
           result={result}
           onAgain={() => { setConfig(result.config); go('session'); }}
           onNew={() => { setConfig(result.config); go('setup'); }}
           onHome={() => go('home')}
         />
-      )}
+      ))}
     </div>
   );
 }

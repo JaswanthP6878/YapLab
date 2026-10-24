@@ -13,7 +13,7 @@ function LiveHarness() {
   const [busy, setBusy] = useState(false);
   const [ambience, setAmbience] = useState(false);
   const config = useMemo(() => defaultConfig('teaching', 'lecture', PERSONAS, { camera: false, noise: ambience }), [ambience]);
-  const live = useLiveSession({ config, enabled: started,
+  const live = useLiveSession({ config, enabled: started, debugLogs: true,
     onTranscript: (text) => setCaptions((previous) => [...previous, text]) });
   const action = async (callback) => {
     setBusy(true); setActionError('');

@@ -35,6 +35,8 @@ export function createAmbiencePolicy({ now = () => Date.now(), random = Math.ran
 
 export function createAmbience(options = {}) {
   const makeAudio = options.createAudio ?? ((url) => new Audio(url));
+  const baseUrl = options.baseUrl ?? import.meta.env?.BASE_URL ?? '/';
+  const soundUrl = (name) => `${baseUrl.replace(/\/?$/, '/')}sfx/${name}.mp3`;
   const policy = createAmbiencePolicy(options);
   const effects = new Set();
   let loop = null;
@@ -72,7 +74,7 @@ export function createAmbience(options = {}) {
       if (disposed || active) return;
       active = true;
       try {
-        const audio = makeAudio('/sfx/room_tone_classroom.mp3');
+        const audio = makeAudio(soundUrl('room_tone_classroom'));
         audio.loop = true;
         loop = { audio, volume: 0.035, blocked: false };
         audio.volume = loop.volume * gain();
@@ -85,7 +87,7 @@ export function createAmbience(options = {}) {
       const decision = policy.next(event);
       if (!decision) return;
       try {
-        const audio = makeAudio(`/sfx/${decision.name}.mp3`);
+        const audio = makeAudio(soundUrl(decision.name));
         const item = { audio, volume: decision.volume, blocked: false };
         effects.add(item);
         audio.volume = item.volume * gain();

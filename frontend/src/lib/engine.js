@@ -291,6 +291,21 @@ export function reducer(state, action) {
       }
       return s;
     }
+    case 'LIVE_SAY': {
+      // Backend events own the room; a transcript must not advance demo timers
+      // or clear listener states, raised questions, and verdict comments.
+      if (typeof action.text !== 'string' || !action.text.trim()) return state;
+      const text = action.text.trim();
+      const found = countFillers(text);
+      const fillers = { ...state.fillers };
+      found.forEach((word) => (fillers[word] = (fillers[word] || 0) + 1));
+      return {
+        ...state,
+        words: state.words + text.split(/\s+/).length,
+        fillers,
+        transcript: [...state.transcript, { who: 'you', text, t: state.elapsed, slide: state.slide, fillers: found.length, tags: [] }],
+      };
+    }
     case 'USER_SAY':
       return presenterSays({ ...state }, action.text, config, state.slide);
     case 'SET_SLIDE': {
