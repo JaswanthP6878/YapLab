@@ -32,6 +32,17 @@ class FallbackLLM(LLMClient):
         # Called with a short reason string each time a request falls back.
         self.on_fallback = on_fallback
         self.fallback_count = 0
+        self._closed_clients: set[int] = set()
+
+    async def aclose(self) -> None:
+        """Close optional provider resources, including a real fallback."""
+        for client in (self.primary, self.fallback):
+            if id(client) in self._closed_clients:
+                continue
+            close = getattr(client, "aclose", None)
+            if callable(close):
+                await close()
+            self._closed_clients.add(id(client))
 
     def _note(self, reason: str) -> None:
         self.fallback_count += 1

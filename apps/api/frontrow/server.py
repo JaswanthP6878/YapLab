@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import logging
 import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -63,27 +64,58 @@ _SPOKEN_EVENTS = ("hand_raised", "qa_question")
 # Per-client outbound buffer; a client this far behind is disconnected.
 _CLIENT_QUEUE_MAX = 1000
 
+# Speech generation measurements must be visible under the normal uvicorn command.
+_speech_logger = logging.getLogger("frontrow.speech_elevenlabs")
+if not _speech_logger.handlers:
+    _speech_logger.addHandler(logging.StreamHandler())
+_speech_logger.setLevel(logging.INFO)
+_speech_logger.propagate = False
+
 
 def llm_from_env() -> Callable[[], LLMClient]:
-    """LLM factory from ``FRONTROW_LLM`` (``fake``, ``deepseek``, or ``openai``)."""
+    """LLM factory from ``FRONTROW_LLM`` (fake, deepseek, openai, or anthropic)."""
     kind = os.environ.get("FRONTROW_LLM", "fake").strip() or "fake"
     if kind == "fake":
         return FakeLLM
     if kind in PROVIDERS:
         return lambda: FallbackLLM(OpenAIClient(provider=kind))
+    if kind == "anthropic":
+        from .llm.anthropic_client import AnthropicClient
+
+        return lambda: FallbackLLM(AnthropicClient())
     raise RuntimeError(
-        f"unknown FRONTROW_LLM: {kind!r} (use fake, {', '.join(PROVIDERS)})"
+        f"unknown FRONTROW_LLM: {kind!r} (use fake, {', '.join(PROVIDERS)}, or anthropic)"
     )
 
 
-def speech_engines_from_env() -> tuple[TTSEngine, STTTokenProvider]:
-    """The TTS engine and STT token provider to use.
+def _speech_provider_kind(name: str) -> str:
+    kind = os.environ.get(name, "none").strip() or "none"
+    if kind not in {"none", "elevenlabs"}:
+        raise RuntimeError(f"unknown {name}: {kind!r} (use none or elevenlabs)")
+    return kind
 
-    Plug real engines in here (e.g. selected by ``FRONTROW_TTS`` /
-    ``FRONTROW_STT``). Until then questions are text-only and the STT token
-    endpoint returns 501.
-    """
-    return NoTTS(), NoSTTTokens()
+
+def _tts_from_env(kind: str) -> TTSEngine:
+    if kind == "none":
+        return NoTTS()
+    from .speech_elevenlabs import ElevenLabsTTS
+
+    return ElevenLabsTTS()
+
+
+def _stt_from_env(kind: str) -> STTTokenProvider:
+    if kind == "none":
+        return NoSTTTokens()
+    from .speech_elevenlabs import ElevenLabsSTTTokens
+
+    return ElevenLabsSTTTokens()
+
+
+def speech_engines_from_env() -> tuple[TTSEngine, STTTokenProvider]:
+    """Select both optional speech engines without changing the session protocol."""
+    tts_kind = _speech_provider_kind("FRONTROW_TTS")
+    stt_kind = _speech_provider_kind("FRONTROW_STT")
+    return _tts_from_env(tts_kind), _stt_from_env(stt_kind)
 
 
 @dataclass(eq=False)
@@ -177,19 +209,40 @@ def create_app(
     """Build the app. Every dependency is injectable for tests."""
     base_config = config or Config.from_env()
     make_llm = llm_factory or llm_from_env()
-    make_llm()  # fail fast on a misconfigured LLM (e.g. missing API key)
-    env_tts, env_stt = speech_engines_from_env()
-    tts_engine = tts or env_tts
-    stt_provider = stt_tokens or env_stt
+    validation_llm = make_llm()  # fail fast; retain ownership for shutdown
+    # Explicit dependencies override provider configuration as well as instances.
+    # An ignored environment provider must not require its optional SDK or key.
+    tts_engine = tts if tts is not None else _tts_from_env(_speech_provider_kind("FRONTROW_TTS"))
+    stt_provider = stt_tokens if stt_tokens is not None else _stt_from_env(_speech_provider_kind("FRONTROW_STT"))
     sessions: dict[str, _Live] = {}
 
     @contextlib.asynccontextmanager
     async def lifespan(_app: FastAPI):
-        yield
-        for live in sessions.values():
-            for task in live.tasks:
-                task.cancel()
-            await live.session.close()
+        try:
+            yield
+        finally:
+            for live in sessions.values():
+                # A settling tick can still raise a hand and enqueue speech while
+                # close() waits for it. Stop that producer before taking the snapshot.
+                await live.session.close()
+                tasks = list(live.tasks)
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+            # Each room shares one LLM across its listeners, and injected
+            # factories may share it across rooms (or with fail-fast validation).
+            resources = [tts_engine, stt_provider, validation_llm]
+            resources.extend(
+                listener.llm
+                for live in sessions.values()
+                for listener in live.session.listeners.values()
+            )
+            closed: set[int] = set()
+            for resource in resources:
+                close = getattr(resource, "aclose", None)
+                if callable(close) and id(resource) not in closed:
+                    closed.add(id(resource))
+                    await close()
 
     app = FastAPI(title="FrontRow", lifespan=lifespan)
     origins = os.environ.get("FRONTROW_CORS_ORIGINS", "*").split(",")

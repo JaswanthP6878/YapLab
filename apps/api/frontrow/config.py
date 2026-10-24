@@ -63,7 +63,10 @@ def _default_model() -> str:
     """Default model for the provider named by ``FRONTROW_LLM``."""
     from .llm.openai_client import PROVIDERS
 
-    provider = PROVIDERS.get(_env_str("FRONTROW_LLM", "fake"))
+    name = _env_str("FRONTROW_LLM", "fake").strip().lower()
+    if name == "anthropic":
+        return "claude-haiku-5-5"
+    provider = PROVIDERS.get(name)
     return provider.default_model if provider else "gpt-4o-mini"
 
 
@@ -126,12 +129,18 @@ class Config(BaseModel):
 
         Explicit ``overrides`` take precedence over environment values.
         """
+        tick_interval = _env_float("FRONTROW_TICK_INTERVAL_SECONDS", 15.0)
+        # Shorter demo ticks need an implicit listener deadline below the tick.
+        # Explicit timeouts still go through the normal consistency validation.
+        try:
+            effective_tick = float(overrides.get("tick_interval_seconds", tick_interval))
+        except (TypeError, ValueError):
+            effective_tick = tick_interval  # Config validation reports invalid overrides.
+        listener_timeout_default = min(10.0, effective_tick * 2 / 3)
         values: dict[str, object] = {
-            "tick_interval_seconds": _env_float(
-                "FRONTROW_TICK_INTERVAL_SECONDS", 15.0
-            ),
+            "tick_interval_seconds": tick_interval,
             "per_listener_timeout_seconds": _env_float(
-                "FRONTROW_PER_LISTENER_TIMEOUT_SECONDS", 10.0
+                "FRONTROW_PER_LISTENER_TIMEOUT_SECONDS", listener_timeout_default
             ),
             "transcript_window_seconds": _env_float(
                 "FRONTROW_TRANSCRIPT_WINDOW_SECONDS", 30.0

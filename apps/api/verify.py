@@ -40,6 +40,7 @@ from frontrow.moderator import Moderator
 from frontrow.orchestrator import Orchestrator
 from frontrow.personas import build_room
 from frontrow.transcript import TranscriptBuffer
+from verify_voice_integration import VOICE_CHECKS
 
 SCENARIO_PATH = (
     Path(__file__).resolve().parents[2] / "scenarios" / "sample_talk.json"
@@ -1081,6 +1082,9 @@ CHECKS = [
     ("listener remembers its own questions and verdicts", check_listener_remembers_its_questions),
     ("server: REST + WebSocket session with stub speech engines", check_server_end_to_end),
 ]
+
+
+CHECKS.extend(VOICE_CHECKS)
 
 
 def main() -> int:
