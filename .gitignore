@@ -4,6 +4,7 @@
 .env
 eval_runs/
 # Frontend build artifacts
+node_modules/
 frontend/node_modules/
 frontend/dist/
 **/node_modules/
