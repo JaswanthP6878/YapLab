@@ -282,3 +282,8 @@ See [infra/README.md](infra/README.md) for the full walkthrough.
 Python, FastAPI, asyncio, Pydantic, DeepSeek V4 or Claude for listeners (OpenAI also supported), ElevenLabs Scribe and TTS, React, Vite, pdf.js, Caddy on Google Cloud, Remotion.
 
 ## Team
+- Jaswanth Pinnepu (jpinnepu@bu.edu)
+- Sonal Phatige Sanjay (sonalps@bu.edu)
+- Zukhriddin Fakhriddinov (zfmsai@bu.edu)
+- Harsha Beth (hbbeth@bu.edu)
+
