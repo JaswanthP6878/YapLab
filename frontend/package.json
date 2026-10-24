@@ -6,9 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "dev:live": "vite frontend --config vite.config.js",
+    "build:live": "vite build frontend --config vite.config.js",
+    "test:live": "node --test frontend/src/live/tests/*.test.js"
   },
   "dependencies": {
+    "@elevenlabs/react": "1.19.1",
     "pdfjs-dist": "^4.10.38",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
