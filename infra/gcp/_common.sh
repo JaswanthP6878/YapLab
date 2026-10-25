@@ -15,7 +15,7 @@ VM_NAME="${VM_NAME:-yaplab-api}"
 MACHINE_TYPE="${MACHINE_TYPE:-e2-small}"
 DISK_SIZE_GB="${DISK_SIZE_GB:-20}"
 DISK_TYPE="${DISK_TYPE:-pd-standard}"
-UV_EXTRAS="${UV_EXTRAS:-anthropic openai elevenlabs}"
+UV_EXTRAS="${UV_EXTRAS:-anthropic openai elevenlabs data}"
 PUBLIC_HOST="${PUBLIC_HOST:-}"
 
 ADDRESS_NAME="$VM_NAME-ip"
