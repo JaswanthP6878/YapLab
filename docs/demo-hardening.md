@@ -1,8 +1,8 @@
 # Public demo through judging
 
 Target: keep https://35-229-50-202.sslip.io usable without a login through
-December 15, 2026. The hardening branch was started independently from `origin/main` at
-`30accf3`, then rebased onto main after Nemotron PR #14 merged. Deployment
+December 15, 2026. The hardening branch was started independently from
+`origin/main` at `30accf3`, then rebased onto main after Nemotron PR #14 merged. Deployment
 includes Nemotron role/usage instrumentation and the hardening limits below.
 
 ## What was happening
@@ -91,9 +91,17 @@ completed in 180.917 seconds with 18 typed lecture segments over the real
 WebSocket, four raised hands, one real ElevenLabs audio fetch (86,560 bytes),
 a `partial` answer verdict, and the normal report including teaching moves.
 It minted a real Scribe v2 Realtime token; this scripted check did not record a
-microphone. Claude Haiku 5.5 was used because this branch is independent of the
-still-open Nemotron PR. No fallback, listener/summary/judge, or audio errors
-were recorded. Nemotron deployment remains ordered after PR #14.
+microphone. That initial check used Claude Haiku 5.5 before the Nemotron PR
+merged. No fallback, listener/summary/judge, or audio errors were recorded. After rebasing onto merged PR #14, all **90 backend checks**, **86 frontend
+tests**, and the production build passed. The added summary-context regression
+checks that tracked tasks preserve the fast tier, summary role, and session
+observer. A shared-client regression also verifies evicted sessions are
+garbage-collected while fallback callbacks and active-session counters still work.
+A [real Nemotron replay](evidence/demo-hardening-nebius-replay.json)
+recorded **15 reaction requests and 3 summary requests** under `fast`, with
+**0 fallbacks and 0 errors**. All 18 calls used Nano; this replay produced no
+answer-grading calls. Nebius reported an estimated **$0.00081798** inference cost
+at list prices, excluding voice and hosting. Deployment remains an owner step.
 
 ## Owner checklist after merge
 

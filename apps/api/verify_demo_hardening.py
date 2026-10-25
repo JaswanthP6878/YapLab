@@ -6,6 +6,7 @@ import asyncio
 import gc
 import importlib
 import io
+import logging
 import os
 import signal
 import threading
@@ -658,7 +659,92 @@ def check_demo_cutoff_cancels_summary_from_direct_closing_tick() -> None:
     asyncio.run(run())
 
 
+def check_demo_tracked_summary_task_preserves_fast_observer_context() -> None:
+    from frontrow.agent import Listener
+    from frontrow.llm.base import emit_llm_event, llm_call_context
+    from frontrow.llm.fake import SUMMARY_MARKER
+    from frontrow.models import TranscriptChunk
+    from frontrow.moderator import Moderator
+    from frontrow.orchestrator import Orchestrator
+    from frontrow.personas import ALL_PERSONAS
+    from frontrow.transcript import TranscriptBuffer
+    class SummaryRequest(FakeLLM):
+        async def complete(self, system, user, *, model, timeout):
+            assert SUMMARY_MARKER in system + user, "exercise the real summary prompt path"
+            await asyncio.sleep(0)
+            emit_llm_event("request", provider="offline-test", model=model,
+                latency_seconds=.01, usage={"prompt_tokens": 10, "completion_tokens": 5},
+                finish_reason="stop", outcome="success", error_type=None)
+            return '{"summary":"Replication uses a quorum."}'
+    async def run():
+        observed = []
+        clock = SimulatedClock(start=1)
+        cfg = Config(llm_model="legacy-wrong-model", llm_model_fast="fast-summary-model",
+                     llm_model_reasoning="reasoning-wrong-model")
+        transcript = TranscriptBuffer()
+        transcript.append(TranscriptChunk(start=0, end=1, text="Replication uses a quorum."))
+        orchestrator = Orchestrator(config=cfg, clock=clock,
+            listeners=[Listener("L0", ALL_PERSONAS[0], FakeLLM())],
+            transcript=transcript, moderator=Moderator(cfg, clock),
+            summarizer=SummaryRequest(), llm_observer=observed.append)
+        try:
+            # A task created before the summary's context would inherit this
+            # deliberately wrong context and lose the session observer.
+            with llm_call_context("reasoning", "wrong-outer-role"):
+                await orchestrator.run_tick()
+            assert len(observed) == 1, "the actual tracked summary request must reach its observer"
+            request = observed[0]
+            assert request["kind"] == "request" and request["tier"] == "fast" and request["role"] == "summary", request
+            assert request["model"] == "fast-summary-model", request
+            assert orchestrator.talk_summary == "Replication uses a quorum."
+        finally:
+            await orchestrator.close()
+    asyncio.run(run())
+
+
+def check_demo_shared_fallback_does_not_retain_evicted_sessions() -> None:
+    from httpx import ASGITransport, AsyncClient
+    from frontrow.llm.base import llm_logger
+    from frontrow.llm.fallback import FallbackLLM
+    class FailingPrimary(FakeLLM):
+        async def complete(self, system, user, *, model, timeout):
+            raise RuntimeError("offline primary failure")
+    async def run():
+        reasons = []
+        original_hook = reasons.append
+        shared = FallbackLLM(FailingPrimary(), on_fallback=original_hook)
+        clock = ManualClock()
+        app = _app(clock=clock, llm_factory=lambda: shared)
+        async with app.router.lifespan_context(app), AsyncClient(transport=ASGITransport(app), base_url="http://offline") as client:
+            ids = [(await client.post("/sessions", json={})).json()["id"] for _ in range(4)]
+            references = [weakref.ref(app.state.sessions[sid].session) for sid in ids]
+            clock.advance(60)
+            await app.state.sweep_sessions()
+            assert all(app.state.sessions[sid].closed for sid in ids)
+            clock.advance(3600)
+            await app.state.sweep_sessions()
+            assert all(sid not in app.state.sessions for sid in ids)
+            gc.collect()
+            assert all(reference() is None for reference in references), "shared fallback hooks must not retain evicted transcripts or sessions"
+
+            sid = (await client.post("/sessions", json={})).json()["id"]
+            session = app.state.sessions[sid].session
+            session.start()
+            await session.listeners["L0"].react(
+                "Replication uses a quorum to preserve consistency.", [],
+                model="offline-model", timeout=1, clock=SimulatedClock(),
+            )
+            assert shared.on_fallback is original_hook and len(reasons) == shared.fallback_count == 1
+            events = [event for event in session.events if event.type == "llm_fallback"]
+            assert len(events) == 1 and events[0].data["tier"] == "fast" and events[0].data["role"] == "reaction", events
+            assert session.llm_stats["tiers"]["fast"]["fallbacks"] == 1
+            assert all(reference() is None for reference in references)
+    with patch.object(llm_logger, "handlers", [logging.NullHandler()]):
+        asyncio.run(run())
+
+
 DEMO_HARDENING_CHECKS = [
+    ("demo: shared fallback subscriptions release evicted sessions", check_demo_shared_fallback_does_not_retain_evicted_sessions),
     ("demo: rolling-hour quota + pending-only reservation refunds", check_demo_rolling_hour_and_reservation_refunds),
     ("demo: 150-session UTC budget resets + late refunds stay isolated", check_demo_daily_budget_utc_reset_and_late_refund),
     ("demo: exact-loopback proxy trust + finite lifecycle defaults", check_demo_proxy_trust_and_config_defaults),
@@ -675,4 +761,5 @@ DEMO_HARDENING_CHECKS = [
     ("demo: cancelled upload retains one extractor and refunds admission", check_demo_cancelled_upload_holds_extraction_slot_but_refunds_admission),
     ("demo: SDK close finishes once when shutdown interrupts cleanup", check_demo_sdk_close_survives_cancelled_cleanup_during_shutdown),
     ("demo: cutoff cancels the summary of a direct closing tick", check_demo_cutoff_cancels_summary_from_direct_closing_tick),
+    ("demo: tracked summary task preserves fast-tier request observer", check_demo_tracked_summary_task_preserves_fast_observer_context),
 ]

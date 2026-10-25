@@ -300,8 +300,6 @@ infra/gcp/deploy.sh                             # builds and ships API + fronten
 
 See [infra/README.md](infra/README.md) for the full walkthrough.
 
-
-
 ## Data
 
 Our report-only teaching-moves coach uses TalkMoves classroom annotations, a TF-IDF and logistic regression classifier, and lesson-level bootstrap benchmarks. See the [dataset datasheet](data/README.md) for provenance and licensing, and [data science methods and ethics](docs/data-science.md) for measured results and figures.

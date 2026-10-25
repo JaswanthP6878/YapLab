@@ -100,15 +100,10 @@ class Session:
             summarizer=llm,
             llm_observer=self.llm_usage.record,
         )
-        if isinstance(llm, FallbackLLM):
-            previous_hook = llm.on_fallback
-            def on_fallback(reason: str) -> None:
-                if previous_hook is not None:
-                    previous_hook(reason)
-                context = current_llm_call()
-                if context.observer is None or context.observer == self.llm_usage.record:
-                    self._record("llm_fallback", reason=reason, tier=context.tier, role=context.role)
-            llm.on_fallback = on_fallback
+        self._unsubscribe_fallback = (
+            llm.subscribe_fallback(self._on_llm_fallback)
+            if isinstance(llm, FallbackLLM) else None
+        )
 
         self._seen_seq: set[int] = set()
         self._last_end = 0.0
@@ -137,6 +132,11 @@ class Session:
 
     def _record(self, type_: str, **data: object) -> None:
         self.orchestrator.record(type_, **data)
+
+    def _on_llm_fallback(self, reason: str) -> None:
+        context = current_llm_call()
+        if not self._closed and (context.observer is None or context.observer == self.llm_usage.record):
+            self._record("llm_fallback", reason=reason, tier=context.tier, role=context.role)
 
     def _transition(self, target: SessionState) -> None:
         if PERMITTED_TRANSITIONS.get(self.state) is not target:
@@ -243,9 +243,14 @@ class Session:
         tasks = [t for t in (self._loop_task, *self._evaluations) if t is not None]
         for task in tasks:
             task.cancel()
-        await self.orchestrator.close()
-        await asyncio.gather(*tasks, return_exceptions=True)
-        self._log_llm_summary()
+        try:
+            await self.orchestrator.close()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            self._log_llm_summary()
+        finally:
+            unsubscribe, self._unsubscribe_fallback = self._unsubscribe_fallback, None
+            if unsubscribe is not None:
+                unsubscribe()
 
     async def end_for_report(self) -> None:
         """End an abandoned/expired run using accepted data and no fresh inference.
