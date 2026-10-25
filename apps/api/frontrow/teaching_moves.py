@@ -26,8 +26,17 @@ MOVES = (
     (5, "pressing_for_accuracy", "Asking for precision"),
     (2, "getting_students_to_relate", "Connecting ideas"),
 )
+_DISPLAYED = frozenset(label for label, _, _ in MOVES)
 _logger = logging.getLogger(__name__)
 _SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+|[\r\n]+")
+# Classroom teaching moves are prompts to the room. In a presenter's monologue the
+# classifier also fires on plain explanations, so displayed moves count only for
+# questions: a trailing "?" or a leading interrogative/auxiliary word.
+_QUESTION = re.compile(
+    r"\?\s*$|^(?:(?:so|and|okay|ok|now|well)\b[\s,]*)?"
+    r"(?:who|what|why|how|when|where|which|does|do|did|is|are|can|could|would|should|will|have|has)\b",
+    re.IGNORECASE,
+)
 
 
 @lru_cache(maxsize=1)
@@ -50,11 +59,15 @@ def _load_artifacts() -> tuple[Any, dict[str, Any], dict[str, Any]] | None:
 
 
 def analyze(segments: list[str]) -> dict[str, Any] | None:
-    """Classify presenter sentences with previous-sentence context.
+    """Classify presenter sentences one at a time.
 
     Each sentence contributes to one class. All seven classes participate in
     prediction, including the three not displayed; they still count in the rate
-    denominator. Examples are the presenter's two most confident sentences for
+    denominator. Sentences are classified without context: the training context
+    is a preceding *student* turn, and pairing a presenter answer with the
+    presenter's own question made answers look like the question's move. A
+    displayed move counts only for a question; other sentences fall back to
+    ``none``. Examples are the presenter's two most confident sentences for
     each displayed move. Segments and sentence order are retained.
     """
     sentences = [
@@ -69,17 +82,17 @@ def analyze(segments: list[str]) -> dict[str, Any] | None:
     if artifacts is None:
         return None
     pipeline, benchmarks, metrics = artifacts
-    inputs = [
-        f"{sentences[index - 1] if index else ''} [SEP] {sentence}".lower()
-        for index, sentence in enumerate(sentences)
-    ]
+    inputs = [f" [SEP] {sentence}".lower() for sentence in sentences]
     try:
         probabilities = pipeline.predict_proba(inputs)
         classes = [int(label) for label in pipeline.classes_]
         predictions: dict[int, list[tuple[float, int, str]]] = {label: [] for label in classes}
         for index, (sentence, row) in enumerate(zip(sentences, probabilities, strict=True)):
             column = max(range(len(classes)), key=lambda i: row[i])
-            predictions[classes[column]].append((float(row[column]), index, sentence))
+            label = classes[column]
+            if label in _DISPLAYED and not _QUESTION.search(sentence):
+                label = 0
+            predictions.setdefault(label, []).append((float(row[column]), index, sentence))
         moves = []
         for label, key, title in MOVES:
             matches = predictions.get(label, [])

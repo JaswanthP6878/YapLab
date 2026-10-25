@@ -112,9 +112,30 @@ def check_teaching_moves_sentence_boundaries_and_context() -> None:
     with _artifacts(pipeline):
         result = teaching_moves.analyze(["  The value is 3.14. Are you following? Yes!\nNext thought  ", "  ", "The next segment."])
     assert result["sentences"] == len(sentences), result
-    previous = [""] + sentences[:-1]
-    assert pipeline.inputs == [f"{before} [SEP] {sentence}".lower() for before, sentence in zip(previous, sentences)], pipeline.inputs
+    # Sentences are classified without context: a presenter's previous question
+    # must not turn the following answer into that question's move.
+    assert pipeline.inputs == [f" [SEP] {sentence}".lower() for sentence in sentences], pipeline.inputs
     assert all(move["count"] == 0 and move["per_100"] == 0 and move["examples"] == [] for move in result["moves"]), result
+
+
+def check_teaching_moves_count_only_questions() -> None:
+    sentences = [
+        "Why do you think we walk backwards?",
+        "Because each layer passes its effect on to the next.",
+        "First we measure how wrong the guess was.",
+        "So what exactly is a small step",
+        "Does that make sense so far?",
+    ]
+    # The classifier labels every sentence as a move; only the questions count.
+    pipeline = _Pipeline([(6, 0.9), (6, 0.9), (5, 0.9), (5, 0.8), (1, 0.9)])
+    with _artifacts(pipeline):
+        result = teaching_moves.analyze(sentences)
+    _assert_contract(result)
+    together, reasoning, accuracy, relating = result["moves"]
+    assert reasoning["count"] == 1 and reasoning["examples"] == [sentences[0]], reasoning
+    assert accuracy["count"] == 1 and accuracy["examples"] == [sentences[3]], accuracy
+    assert together["count"] == 1 and relating["count"] == 0, result
+    assert result["sentences"] == 5 and reasoning["per_100"] == 20.0, "statements still count in the denominator"
 
 
 def check_teaching_moves_empty_input_needs_no_model() -> None:
@@ -207,7 +228,8 @@ def check_teaching_moves_fitted_predictions() -> None:
 
 TEACHING_MOVE_CHECKS = [
     ("teaching moves: four-move contract + ranked presenter examples", check_teaching_moves_contract_and_ranked_examples),
-    ("teaching moves: sentence boundaries + cross-segment context", check_teaching_moves_sentence_boundaries_and_context),
+    ("teaching moves: sentence boundaries, no cross-sentence context", check_teaching_moves_sentence_boundaries_and_context),
+    ("teaching moves: displayed moves count only for questions", check_teaching_moves_count_only_questions),
     ("teaching moves: empty speech needs no model", check_teaching_moves_empty_input_needs_no_model),
     ("teaching moves: absent artifacts / optional dependencies omit feedback", check_teaching_moves_optional_artifacts_and_dependencies),
     ("teaching moves: classifier failure leaves feedback optional", check_teaching_moves_prediction_failure_is_optional),
