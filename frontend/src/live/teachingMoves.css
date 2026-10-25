@@ -1,0 +1,45 @@
+/* The report's chalkboard palette; interval tracks compare rates, not grades. */
+.teaching-moves-card {
+  background: var(--board-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 22px;
+  min-width: 0;
+}
+.teaching-moves-intro { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 20px; }
+.teaching-moves-intro > span { color: var(--chalk-2); font-size: 12px; }
+.teaching-moves-legend { display: flex; flex-wrap: wrap; gap: 10px 22px; margin-top: 18px; color: var(--chalk-2); font-size: 12px; }
+.teaching-moves-legend > span { display: inline-flex; align-items: center; gap: 8px; }
+.teaching-moves-legend i { display: inline-block; flex: none; }
+.teaching-key-you { width: 22px; height: 4px; background: var(--mint); border-radius: 3px; }
+.teaching-key-median { height: 15px; width: 2px; background: var(--chalk); }
+.teaching-key-band { width: 22px; height: 12px; border: 1px solid var(--chalk-2); background: var(--board-4); }
+.teaching-moves-list { margin: 20px 0 0; padding: 0; list-style: none; }
+.teaching-move { padding: 22px 0; border-top: 1px solid var(--line-2); min-width: 0; }
+.teaching-move-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; }
+.teaching-move-heading h3 { font-size: 17px; font-weight: 600; }
+.teaching-move-f1 { color: var(--chalk-2); font-size: 12px; white-space: nowrap; }
+.teaching-move-rate { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-top: 7px; }
+.teaching-move-rate strong { font-size: 16px; font-weight: 500; color: var(--mint); }
+.teaching-move-rate > span { color: var(--chalk-2); font-size: 13px; }
+.teaching-move-chart { margin: 15px 5px 0; }
+.teaching-move-track { position: relative; height: 16px; background: var(--board-3); border-radius: 3px; }
+.teaching-move-track > span { position: absolute; display: block; }
+.teaching-move-band { top: 0; height: 16px; border: 1px solid var(--chalk-2); background: var(--board-4); border-radius: 2px; }
+.teaching-move-fill { top: 6px; height: 4px; border-radius: 3px; background: var(--mint); }
+.teaching-move-median { top: -3px; width: 2px; height: 22px; background: var(--chalk); transform: translateX(-50%); }
+.teaching-move-dot { top: 3px; width: 10px; height: 10px; background: var(--mint); border: 2px solid var(--board-2); border-radius: 50%; transform: translateX(-50%); }
+.teaching-move-axis { display: flex; justify-content: space-between; gap: 12px; color: var(--chalk-2); font-size: 10px; margin-top: 7px; }
+.teaching-move-reference { color: var(--chalk-2); font-size: 12px; margin-top: 10px; }
+.teaching-move-example { margin-top: 8px; color: var(--chalk-2); font-size: 14px; overflow-wrap: anywhere; }
+.teaching-move-example > span { color: var(--chalk); }
+.teaching-move-example q { color: var(--chalk); }
+.teaching-moves-caption { border-top: 1px solid var(--line-2); padding-top: 18px; color: var(--chalk-2); font-size: 12px; overflow-wrap: anywhere; }
+.teaching-moves-caption p + p { margin-top: 4px; }
+.teaching-moves-advisory { color: var(--chalk); font-weight: 600; }
+@media (max-width: 480px) {
+  .teaching-moves-card { padding: 18px; }
+  .teaching-moves-legend { gap: 10px 14px; }
+  .teaching-move-heading h3 { font-size: 16px; }
+  .teaching-move-reference .tnum { white-space: nowrap; }
+}
