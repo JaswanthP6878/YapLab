@@ -14,9 +14,28 @@ A practice classroom full of AI students.
 
 Upload your slides, start talking, and a room of AI listeners reacts in real time. A confused first-year, a skeptical professor, an ESL student, a distracted student, and a domain expert each listen differently. They drift off when you ramble, raise their hands when something you explained is unclear, ask their questions out loud, and judge whether you actually answered. When you finish, you get a report on how the room followed you.
 
-Built for DS+X 2026, CollegeHack track.
+First built at BU DS+X 2026. Runs on NVIDIA Nemotron through Nebius Token Factory (Nebius x NVIDIA Global AI Hackathon, Best Apps and Agents track).
 
 > **Naming:** the product is **YapLab**. The original code name, FrontRow, remains in the Python package (`frontrow`), the settings (`FRONTROW_*`), and the internal docs.
+
+## Powered by NVIDIA Nemotron on Nebius Token Factory
+
+In Nebius mode, every listener, summary, and answer-judging request uses NVIDIA Nemotron through Token Factory. API keys stay on the backend.
+
+| Role | Model | Reasoning |
+|---|---|---|
+| Five parallel listener reactions per 15-second tick | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | Off |
+| Rolling talk summary | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | Off |
+| Answer verdict and optional follow-up | `nvidia/Nemotron-3-Ultra-550b-a55b` | On |
+
+Nano passed 30/30 listener-schema checks under five-way concurrency, with probe p95 **1.015 s** against a 10 s listener deadline. A local **185.9-second Teaching session** (three-minute lecture plus closing/Q&A) made **73 Nemotron calls with 0 fallbacks**, at an estimated **$0.00468402** in Nebius inference usage (about **0.47 U.S. cents**, excluding voice and hosting). See [measurements, setup, and evidence](docs/nebius.md). The hosted VM is migrated manually after merge; this is local proof.
+
+## What changed for the Nebius hackathon
+
+- Added the Token Factory provider and role-based Nano/Ultra routing.
+- Made real-provider failures and per-tier fallback counts visible.
+- Recorded authenticated model/reasoning probes, replay statistics, and a three-minute live session with per-tier latency, usage, fallbacks, and cost.
+- Added an MIT code license while retaining the TalkMoves artifacts' CC BY-NC-SA 4.0 terms.
 
 ## Why
 
@@ -57,7 +76,9 @@ flowchart LR
     Orch -- every tick, in parallel --> L1 & L2 & L3
     L1 & L2 & L3 -- reactions + grounded questions --> Mod
     Orch --> Sum
-    L1 & L2 & L3 <--> LLM[(DeepSeek / Claude / OpenAI)]
+    L1 & L2 & L3 <-->|reactions| FastLLM[(Nemotron Nano<br/>Nebius Token Factory)]
+    Sum <--> FastLLM
+    Session <-->|answer evaluation| ReasonLLM[(Nemotron Ultra<br/>Nebius Token Factory)]
     Mod -- hand_raised --> Server
     Server --> TTS --> ELT[(ElevenLabs TTS)]
     Bridge --> UI
@@ -200,11 +221,13 @@ Requires [uv](https://docs.astral.sh/uv/).
 
 ```bash
 cd apps/api
-uv sync
-cp -n ../../.env.example ../../.env    # FRONTROW_LLM=fake runs fully offline
+uv sync --extra openai
+cp -n ../../.env.example ../../.env
+# Edit .env: FRONTROW_LLM=nebius and NEBIUS_API_KEY=<your key>.
+# FRONTROW_LLM=fake remains the offline option; it does not need an API key.
 
-uv run python verify.py                # offline checks
-uv run python demo.py                  # replay the sample talk
+FRONTROW_LLM=fake uv run python verify.py  # offline checks
+uv run python demo.py --llm nebius     # replay the sample talk on Nemotron
 uv run uvicorn frontrow.server:app --reload    # API at http://127.0.0.1:8000
 
 # in a second terminal: a scripted browser against the running server
@@ -215,11 +238,12 @@ Settings come from the repo-root `.env` (git-ignored) on startup; variables alre
 
 | `FRONTROW_LLM` | Key | Install | Default model |
 |---|---|---|---|
+| `nebius` | `NEBIUS_API_KEY` | `uv sync --extra openai` | Nano for reactions/summary; Ultra for answers ([exact IDs](docs/nebius.md)) |
 | `deepseek` | `DEEPSEEK_API_KEY` | `uv sync --extra openai` | `deepseek-flash` |
 | `anthropic` | `ANTHROPIC_API_KEY` | `uv sync --extra anthropic` | `claude-haiku-5-5` |
 | `openai` | `OPENAI_API_KEY` | `uv sync --extra openai` | `gpt-4o-mini` |
 
-Leave `FRONTROW_LLM_MODEL` blank for the provider default. For voice, add `--extra elevenlabs` and set `FRONTROW_TTS=elevenlabs`, `FRONTROW_STT=elevenlabs`, and `ELEVENLABS_API_KEY`. Extras combine: `uv sync --extra openai --extra anthropic --extra elevenlabs`.
+Leave model overrides blank for provider defaults (Nano/Ultra for Nebius, one model for other providers). `FRONTROW_LLM_MODEL_FAST` and `FRONTROW_LLM_MODEL_REASONING` override their roles; otherwise `FRONTROW_LLM_MODEL` can set both. See [routing and precedence](docs/nebius.md#run-locally). For voice, add `--extra elevenlabs` and set `FRONTROW_TTS=elevenlabs`, `FRONTROW_STT=elevenlabs`, and `ELEVENLABS_API_KEY`. Extras combine: `uv sync --extra openai --extra anthropic --extra elevenlabs --extra data` (`data` enables the teaching-moves report).
 
 ### Frontend
 
@@ -248,8 +272,8 @@ See `.env.example` for the rest.
 
 | Command | Covers |
 |---|---|
-| `cd apps/api && uv run python verify.py` | 60 offline backend checks: moderator, sessions, grounding, memory, server, voice, natural hands, teaching moves (the fitted-model check runs with the data extra) |
-| `cd frontend && npm run test:live` | 70 live-bridge tests: transport, replay, speech, audio, talk lifecycle |
+| `cd apps/api && uv run python verify.py` | 72 offline backend checks: moderator, sessions, grounding, memory, server, voice, natural hands, teaching moves; includes 11 Nebius provider/routing/usage checks (the fitted-model check runs with the data extra) |
+| `cd frontend && npm run test:live` | 75 live-bridge/report tests: transport, replay, speech, audio, talk lifecycle, teaching moves |
 | `cd frontend && npm run build` | Production build |
 
 After changing `frontrow/protocol.py`, regenerate the schema with `uv run python -m frontrow.protocol > ../../packages/protocol/schema.json`.
@@ -281,7 +305,11 @@ Our report-only teaching-moves coach uses TalkMoves classroom annotations, a TF-
 
 ## Tech
 
-Python, FastAPI, asyncio, Pydantic, DeepSeek V4 or Claude for listeners (OpenAI also supported), ElevenLabs Scribe and TTS, React, Vite, pdf.js, Caddy on Google Cloud, Remotion.
+Python, FastAPI, asyncio, Pydantic, NVIDIA Nemotron on Nebius Token Factory (Nano for reactions/summaries, Ultra for answers; DeepSeek, Claude, and OpenAI also supported), ElevenLabs Scribe and TTS, React, Vite, pdf.js, Caddy on Google Cloud, Remotion.
+
+## License
+
+YapLab's original code and documentation are licensed under the [MIT License](LICENSE), copyright 2026 the YapLab team. The TalkMoves-derived model and statistics in `apps/api/frontrow/models/` and `data/results/` are **excluded from MIT** and remain **CC BY-NC-SA 4.0**; retain the [full model license](apps/api/frontrow/models/LICENSE.txt), [results license](data/results/LICENSE.txt), and [source/modification notices](apps/api/frontrow/models/README.md). Other third-party material retains its respective license.
 
 ## Team
 - Jaswanth Pinnepu (jpinnepu@bu.edu)

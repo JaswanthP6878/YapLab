@@ -20,14 +20,16 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import uuid
 from dataclasses import dataclass, field
 
 from .agent import Listener
 from .clock import Clock
 from .config import Config
-from .llm.base import LLMClient
+from .llm.base import LLMClient, current_llm_call, llm_logger
 from .llm.fallback import FallbackLLM
+from .llm.usage import LLMUsage
 from .metrics import word_count
 from .models import (
     PERMITTED_TRANSITIONS,
@@ -81,8 +83,10 @@ class Session:
         self._config = config
         self._clock = clock
         self._transcript = TranscriptBuffer()
+        self.llm_usage = LLMUsage()
+        self._llm_summary_logged = False
         self.listeners = {
-            lid: Listener(lid, persona, llm) for lid, persona in build_room(preset)
+            lid: Listener(lid, persona, llm, llm_observer=self.llm_usage.record) for lid, persona in build_room(preset)
         }
         self.moderator = Moderator(config, clock)
         self.orchestrator = Orchestrator(
@@ -94,9 +98,17 @@ class Session:
             slides=self.slides,
             event_sink=event_sink,
             summarizer=llm,
+            llm_observer=self.llm_usage.record,
         )
         if isinstance(llm, FallbackLLM):
-            llm.on_fallback = lambda reason: self._record("llm_fallback", reason=reason)
+            previous_hook = llm.on_fallback
+            def on_fallback(reason: str) -> None:
+                if previous_hook is not None:
+                    previous_hook(reason)
+                context = current_llm_call()
+                if context.observer is None or context.observer == self.llm_usage.record:
+                    self._record("llm_fallback", reason=reason, tier=context.tier, role=context.role)
+            llm.on_fallback = on_fallback
 
         self._seen_seq: set[int] = set()
         self._last_end = 0.0
@@ -139,6 +151,15 @@ class Session:
             raise SessionError(
                 f"not allowed while {self.state.value} (needs {allowed})"
             )
+
+    @property
+    def llm_stats(self) -> dict:
+        return self.llm_usage.snapshot()
+
+    def _log_llm_summary(self) -> None:
+        if not self._llm_summary_logged and (self.llm_usage.requests or self.llm_usage.fallbacks):
+            llm_logger.info("llm_session_end session=%s stats=%s", self.id, json.dumps(self.llm_stats, sort_keys=True))
+            self._llm_summary_logged = True
 
     # --- lifecycle ----------------------------------------------------------
 
@@ -203,10 +224,12 @@ class Session:
         self._close_answer()
         await self.drain()
         self._transition(SessionState.REPORTING)
+        self._log_llm_summary()
 
     def finish(self) -> None:
         """Reporting -> Ended."""
         self._transition(SessionState.ENDED)
+        self._log_llm_summary()
 
     async def drain(self) -> None:
         """Wait for in-flight answer evaluations."""
@@ -220,6 +243,7 @@ class Session:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         await self.orchestrator.wait_idle()
+        self._log_llm_summary()
 
     # --- inputs from the frontend -------------------------------------------
 
@@ -333,7 +357,7 @@ class Session:
             verdict = await listener.evaluate_answer(
                 hand,
                 text,
-                model=self._config.llm_model,
+                model=self._config.llm_model_reasoning,
                 timeout=self._config.llm_timeout_seconds,
                 grounding_min_chars=self._config.grounding_min_span_chars,
             )
