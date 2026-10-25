@@ -6,8 +6,8 @@ proxies the API (including WebSockets). No domain is needed: by default the
 host is the free `<ip-with-dashes>.sslip.io` name for the VM's IP.
 
 ```
-Browser ──► https://35-229-50-202.sslip.io ──► Caddy :443 ─┬─ /health, /sessions/* ──► uvicorn 127.0.0.1:8000
-                                                           └─ everything else ──────► /var/www/yaplab (frontend)
+Browser ──► https://<host> ──► Caddy :443 ─┬─ /health, /sessions/* ──► uvicorn 127.0.0.1:8000
+                                           └─ everything else ──────► /var/www/yaplab (frontend)
 ```
 
 - **One origin.** The frontend and API share a URL, so there is no CORS to configure and the microphone works (browsers require HTTPS).

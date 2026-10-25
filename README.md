@@ -3,7 +3,6 @@
 </p>
 
 <p align="center">
-  <a href="https://35-229-50-202.sslip.io">Live app</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#architecture">Architecture</a>
 </p>

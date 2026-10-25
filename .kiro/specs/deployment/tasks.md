@@ -47,7 +47,7 @@
   - _Requirements: 5.1, 5.2_
 
 - [ ] 9. Production check
-  - [x] 9.1 Live deploy at `https://35-229-50-202.sslip.io`: certificate, `/health`, `/`, `POST /sessions` 201, session WebSocket `hello`
+  - [x] 9.1 Deployed environment verified: certificate, `/health`, `/`, `POST /sessions` 201, session WebSocket `hello`
     - _Requirements: 4.3, 5.1, 5.2, 5.4, 6.4_
   - [ ] 9.2 A full live Teaching session in the browser: microphone, hands, question audio, report
     - _Requirements: 5.1, 5.2_

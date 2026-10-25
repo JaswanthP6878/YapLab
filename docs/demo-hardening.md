@@ -1,9 +1,9 @@
 # Public demo through judging
 
-Target: keep https://35-229-50-202.sslip.io usable without a login through
-December 15, 2026. The hardening branch was started independently from
-`origin/main` at `30accf3`, then rebased onto main after Nemotron PR #14 merged. Deployment
-includes Nemotron role/usage instrumentation and the hardening limits below.
+The hosted demo link is withheld pending additional security work. This runbook
+covers planned judging availability through December 15, 2026. The hardening
+branch was started independently from `origin/main` at `30accf3`, then rebased
+onto main after Nemotron PR #14 merged. Deployment includes Nemotron role/usage instrumentation and the hardening limits below.
 
 ## What was happening
 
@@ -133,8 +133,8 @@ does not change billing, deploy the app, or create monitoring resources.
   apply only to eligible API services and do not pause this persistent VM's
   ongoing compute/storage costs.
 - [ ] **Uptime:** add a free HTTPS check for
-  `https://35-229-50-202.sslip.io/health`, expect 200 and `ok: true`, and attach
-  an email alert policy for the team. Send a test alert and confirm receipt.
+  `/health` on the privately configured deployment origin, expect 200 and
+  `ok: true`, and attach an email alert policy for the team. Send a test alert and confirm receipt.
   Review the selected check's current free allowance before creating it.
 - [ ] **Deployment:** after both PRs merge, run `infra/gcp/deploy.sh` from the
   merged committed checkout. Preserve `FRONTROW_MODERATOR_WARMUP_SECONDS=15`
