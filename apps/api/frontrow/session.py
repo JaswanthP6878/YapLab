@@ -100,15 +100,10 @@ class Session:
             summarizer=llm,
             llm_observer=self.llm_usage.record,
         )
-        if isinstance(llm, FallbackLLM):
-            previous_hook = llm.on_fallback
-            def on_fallback(reason: str) -> None:
-                if previous_hook is not None:
-                    previous_hook(reason)
-                context = current_llm_call()
-                if context.observer is None or context.observer == self.llm_usage.record:
-                    self._record("llm_fallback", reason=reason, tier=context.tier, role=context.role)
-            llm.on_fallback = on_fallback
+        self._unsubscribe_fallback = (
+            llm.subscribe_fallback(self._on_llm_fallback)
+            if isinstance(llm, FallbackLLM) else None
+        )
 
         self._seen_seq: set[int] = set()
         self._last_end = 0.0
@@ -119,6 +114,7 @@ class Session:
         # Echo suppression: mic input is dropped until this clock time.
         self._playback_until: float | None = None
         self._evaluations: set[asyncio.Task[None]] = set()
+        self._closed = False
 
     # --- plumbing -----------------------------------------------------------
 
@@ -136,6 +132,11 @@ class Session:
 
     def _record(self, type_: str, **data: object) -> None:
         self.orchestrator.record(type_, **data)
+
+    def _on_llm_fallback(self, reason: str) -> None:
+        context = current_llm_call()
+        if not self._closed and (context.observer is None or context.observer == self.llm_usage.record):
+            self._record("llm_fallback", reason=reason, tier=context.tier, role=context.role)
 
     def _transition(self, target: SessionState) -> None:
         if PERMITTED_TRANSITIONS.get(self.state) is not target:
@@ -238,12 +239,45 @@ class Session:
 
     async def close(self) -> None:
         """Cancel background work (tick loop, evaluations), e.g. on shutdown."""
+        self._closed = True
         tasks = [t for t in (self._loop_task, *self._evaluations) if t is not None]
         for task in tasks:
             task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-        await self.orchestrator.wait_idle()
-        self._log_llm_summary()
+        try:
+            await self.orchestrator.close()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            self._log_llm_summary()
+        finally:
+            unsubscribe, self._unsubscribe_fallback = self._unsubscribe_fallback, None
+            if unsubscribe is not None:
+                unsubscribe()
+
+    async def end_for_report(self) -> None:
+        """End an abandoned/expired run using accepted data and no fresh inference.
+
+        Normal presenter commands retain their closing tick and answer judging.
+        A policy cutoff cancels paid work first, then follows the same state chain
+        so the ordinary report endpoint remains available.
+        """
+        await self.close()
+        if self._answer is not None:
+            answer, self._answer = self._answer, None
+            self.moderator.resolve(answer.hand.question_id)
+            self._record("answer", question_id=answer.hand.question_id,
+                         listener=answer.hand.listener_id, text=" ".join(answer.parts))
+        self._playback_until = None
+        if self.state is SessionState.IDLE:
+            self._transition(SessionState.PRESENTING)
+        if self.state is SessionState.PRESENTING:
+            lowered = self.moderator.lower()
+            if lowered is not None:
+                self.orchestrator.record_hand("hand_lowered", lowered)
+            self._transition(SessionState.QA)
+            self._record("qa_pool", size=len(self.moderator.qa_pool))
+        if self.state is SessionState.QA:
+            self._transition(SessionState.REPORTING)
+        if self.state is SessionState.REPORTING:
+            self.finish()
 
     # --- inputs from the frontend -------------------------------------------
 
@@ -347,11 +381,14 @@ class Session:
         self._record(
             "answer", question_id=hand.question_id, listener=hand.listener_id, text=text
         )
-        task = asyncio.ensure_future(self._evaluate(hand, text))
-        self._evaluations.add(task)
-        task.add_done_callback(self._evaluations.discard)
+        if not self._closed:
+            task = asyncio.ensure_future(self._evaluate(hand, text))
+            self._evaluations.add(task)
+            task.add_done_callback(self._evaluations.discard)
 
     async def _evaluate(self, hand: HandRaise, text: str) -> None:
+        if self._closed:
+            return
         listener = self.listeners[hand.listener_id]
         try:
             verdict = await listener.evaluate_answer(

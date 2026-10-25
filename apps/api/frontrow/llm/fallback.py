@@ -9,6 +9,7 @@ instead and reported through ``on_fallback`` so the caller can record it.
 from __future__ import annotations
 
 import asyncio
+import weakref
 from collections.abc import Callable
 from typing import Any
 
@@ -33,6 +34,24 @@ class FallbackLLM(LLMClient):
         self.on_fallback = on_fallback
         self.fallback_count = 0
         self._closed_clients: set[int] = set()
+        self._fallback_subscribers: dict[object, weakref.ReferenceType] = {}
+
+    def subscribe_fallback(self, hook: FallbackHook) -> Callable[[], None]:
+        """Observe fallback reasons weakly; return an idempotent unsubscribe.
+
+        The public ``on_fallback`` callback remains independent. Bound-method
+        observers do not keep their owning session alive after eviction.
+        """
+        token = object()
+        try:
+            reference = weakref.WeakMethod(hook)
+        except TypeError:
+            reference = weakref.ref(hook)
+        self._fallback_subscribers[token] = reference
+
+        def unsubscribe() -> None:
+            self._fallback_subscribers.pop(token, None)
+        return unsubscribe
 
     async def aclose(self) -> None:
         """Close optional provider resources, including a real fallback."""
@@ -49,6 +68,12 @@ class FallbackLLM(LLMClient):
         emit_llm_event("fallback", provider=getattr(self.primary, "provider_name", type(self.primary).__name__), model=model, reason=reason)
         if self.on_fallback is not None:
             self.on_fallback(reason)
+        for token, reference in list(self._fallback_subscribers.items()):
+            hook = reference()
+            if hook is None:
+                self._fallback_subscribers.pop(token, None)
+            else:
+                hook(reason)
 
     async def complete(
         self, system: str, user: str, *, model: str, timeout: float

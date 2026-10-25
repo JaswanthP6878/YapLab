@@ -518,27 +518,35 @@ def check_shutdown_settles_late_voice_tasks_before_clients_close() -> None:
 
         async def close_with_late_hand(session):
             await original_close(session)
-            # Session.close waits for an in-flight tick. That tick can emit a
-            # hand raise while close is awaited, enqueuing a last speech task.
+            # A late producer event must not start another paid request once
+            # shutdown has marked this room as closing.
             text = f"late-question-{session.id}"
             started[text] = asyncio.Event()
             session.orchestrator.record("hand_raised", question_id=text, listener="L0",
                                         persona=ALL_PERSONAS[0].name, question=text)
-            await asyncio.wait_for(started[text].wait(), timeout=1)
+            await asyncio.sleep(0)
+            assert not started[text].is_set(), "closing rooms must reject new speech work"
             closed_sessions.append(session.id)
-            order.append(f"session_closed:{text}")
+            order.append(f"session_closed:{session.id}")
 
         voice, tokens = VoiceEngine(), TokenEngine()
         with patch.object(server.Session, "close", close_with_late_hand):
             app = server.create_app(config=Config(), llm_factory=make_llm, tts=voice, stt_tokens=tokens)
             async with app.router.lifespan_context(app):
                 create = _endpoint(app, "/sessions", "POST")
-                await create(CreateSessionRequest())
-                await create(CreateSessionRequest())
+                rooms = [await create(CreateSessionRequest()), await create(CreateSessionRequest())]
+                for room in rooms:
+                    text = f"inflight-question-{room.id}"
+                    started[text] = asyncio.Event()
+                    app.state.sessions[room.id].session.orchestrator.record(
+                        "hand_raised", question_id=text, listener="L0",
+                        persona=ALL_PERSONAS[0].name, question=text)
+                    await asyncio.wait_for(started[text].wait(), timeout=1)
         assert len(voice_tasks) == 2 and all(task.done() and task.cancelled() for task in voice_tasks)
         assert validation.closed == shared_room.closed == voice.closed == tokens.closed == 1
-        for text in started:
-            assert order.index(f"session_closed:{text}") < order.index(f"voice_stopped:{text}")
+        for room in rooms:
+            text = f"inflight-question-{room.id}"
+            assert order.index(f"session_closed:{room.id}") < order.index(f"voice_stopped:{text}")
             assert order.index(f"voice_stopped:{text}") < order.index("tts_closed")
         assert factory_calls == 3  # Validation plus two rooms; listener references share the room client.
 

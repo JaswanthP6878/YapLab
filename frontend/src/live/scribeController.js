@@ -177,7 +177,9 @@ export class ScribeSpeechController {
   fail(error) {
     this.wanted = false;
     this.stopCapture();
-    this.options.onError(error?.message || String(error));
+    let message = error?.message || String(error);
+    if ([429, 503].includes(error?.status) && !/\btyp(?:e|ing)\b/i.test(message)) message += ' You can keep typing.';
+    this.options.onError(message);
     this.options.onStatus('error');
   }
 

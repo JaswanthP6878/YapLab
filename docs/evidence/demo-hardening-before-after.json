@@ -1,0 +1,36 @@
+{
+  "mode": "offline counting fakes; no paid provider calls",
+  "before": {
+    "baseline_revision": "30accf3",
+    "calls_at_disconnect": 6,
+    "calls_after_2_2_seconds_disconnected": 16,
+    "state_after_disconnect": "presenting",
+    "stt_requests": 12,
+    "stt_successes": 12,
+    "provider_token_calls": 12,
+    "health": {
+      "ok": true,
+      "sessions": 1
+    }
+  },
+  "after": {
+    "base_revision": "30accf3",
+    "idle_end_seconds": 0.25,
+    "calls_after_cleanup": 6,
+    "calls_at_disconnect": 6,
+    "state_after_disconnect": "ended",
+    "stt_requests": 12,
+    "stt_successes": 10,
+    "provider_token_calls": 10,
+    "health": {
+      "ok": true,
+      "sessions": 1,
+      "live_sessions": 0,
+      "retained_sessions": 1
+    },
+    "report_status": 200,
+    "calls_2_2_seconds_after_cleanup": 6,
+    "cleanup_wait_seconds": 1.2
+  },
+  "note": "After probe shortens idle grace to 0.25s and waits 1.2s for the 1s maintenance scanner; default 60/1200/3600 boundaries are covered by deterministic checks."
+}

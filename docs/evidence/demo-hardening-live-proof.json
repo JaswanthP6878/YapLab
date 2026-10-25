@@ -1,0 +1,26 @@
+{
+  "session_id": "0b8b3d3204404bbbb695f98a324b50c1",
+  "talk_wall_seconds": 180.917,
+  "typed_lecture_lines": 18,
+  "hands": 4,
+  "verdicts": [
+    "partial"
+  ],
+  "audio": [
+    {
+      "question_id": "q5",
+      "bytes": 86560
+    }
+  ],
+  "stt_provider": "elevenlabs",
+  "stt_token_minted": true,
+  "fallback_events": 0,
+  "error_events": [],
+  "teaching_moves_present": true,
+  "llm_provider": "anthropic",
+  "llm_model": "claude-haiku-5-5",
+  "stt_model": "scribe_v2_realtime",
+  "input": "typed transcript over real WebSocket; one real STT token minted; no microphone recording",
+  "report_status": 200,
+  "completed_ticks": 17
+}

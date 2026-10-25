@@ -40,6 +40,7 @@ from frontrow.moderator import Moderator
 from frontrow.orchestrator import Orchestrator
 from frontrow.personas import build_room
 from frontrow.transcript import TranscriptBuffer
+from verify_demo_hardening import DEMO_HARDENING_CHECKS
 from verify_natural_hands import NATURAL_HAND_CHECKS
 from verify_nebius import NEBIUS_CHECKS
 from verify_teaching_moves import TEACHING_MOVE_CHECKS
@@ -1097,6 +1098,7 @@ CHECKS.extend(NATURAL_HAND_CHECKS)
 CHECKS.extend(VOICE_CHECKS)
 CHECKS.extend(TEACHING_MOVE_CHECKS)
 CHECKS.extend(NEBIUS_CHECKS)
+CHECKS.extend(DEMO_HARDENING_CHECKS)
 
 
 def main() -> int:
