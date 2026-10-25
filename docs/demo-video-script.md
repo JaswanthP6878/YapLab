@@ -42,7 +42,7 @@ Every scene shows its voice-over line as a burned-in caption (turn them off with
 
 ## Part 3: Demo — 1:30–3:00 (screen recording)
 
-**Setup before recording:** the deployed app at `https://35-229-50-202.sslip.io` (or local), Chrome, a headset, voices on, camera off. Record at 1920×1080, 30 fps, to match the intro.
+**Setup before recording:** the app running locally, Chrome, a headset, voices on, camera off. Record at 1920×1080, 30 fps, to match the intro.
 
 | Time | On screen | Audio |
 |---|---|---|
