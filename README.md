@@ -14,7 +14,7 @@ A practice classroom full of AI students.
 
 Upload your slides, start talking, and a room of AI listeners reacts in real time. A confused first-year, a skeptical professor, an ESL student, a distracted student, and a domain expert each listen differently. They drift off when you ramble, raise their hands when something you explained is unclear, ask their questions out loud, and judge whether you actually answered. When you finish, you get a report on how the room followed you.
 
-Built for Hackachusetts 2026, Civic Action track (Better college experiences).
+Built for DS+X 2026, CollegeHack track.
 
 > **Naming:** the product is **YapLab**. The original code name, FrontRow, remains in the Python package (`frontrow`), the settings (`FRONTROW_*`), and the internal docs.
 
@@ -248,7 +248,7 @@ See `.env.example` for the rest.
 
 | Command | Covers |
 |---|---|
-| `cd apps/api && uv run python verify.py` | 53 offline backend checks: moderator, sessions, grounding, memory, server, voice, natural hands |
+| `cd apps/api && uv run python verify.py` | 60 offline backend checks: moderator, sessions, grounding, memory, server, voice, natural hands, teaching moves (the fitted-model check runs with the data extra) |
 | `cd frontend && npm run test:live` | 70 live-bridge tests: transport, replay, speech, audio, talk lifecycle |
 | `cd frontend && npm run build` | Production build |
 
@@ -265,6 +265,10 @@ infra/gcp/deploy.sh                             # builds and ships API + fronten
 ```
 
 See [infra/README.md](infra/README.md) for the full walkthrough.
+
+## Data
+
+Our report-only teaching-moves coach uses TalkMoves classroom annotations, a TF-IDF and logistic regression classifier, and lesson-level bootstrap benchmarks. See the [dataset datasheet](data/README.md) for provenance and licensing, and [data science methods and ethics](docs/data-science.md) for measured results and figures.
 
 ## Further reading
 

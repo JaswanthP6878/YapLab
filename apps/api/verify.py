@@ -41,6 +41,7 @@ from frontrow.orchestrator import Orchestrator
 from frontrow.personas import build_room
 from frontrow.transcript import TranscriptBuffer
 from verify_natural_hands import NATURAL_HAND_CHECKS
+from verify_teaching_moves import TEACHING_MOVE_CHECKS
 from verify_voice_integration import VOICE_CHECKS
 
 SCENARIO_PATH = (
@@ -1093,6 +1094,7 @@ CHECKS = [
 
 CHECKS.extend(NATURAL_HAND_CHECKS)
 CHECKS.extend(VOICE_CHECKS)
+CHECKS.extend(TEACHING_MOVE_CHECKS)
 
 
 def main() -> int:

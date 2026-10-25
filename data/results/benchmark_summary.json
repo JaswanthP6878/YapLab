@@ -1,0 +1,107 @@
+{
+  "source": "Human labels from native data/Subset 1 and data/Subset 2 workbooks, one lesson or lesson portion per file.",
+  "provenance": {
+    "revision": "869b9406de268ebab0f1b9a3bccde0b416b97290",
+    "repository": "https://github.com/SumnerLab/TalkMoves",
+    "license": "CC BY-NC-SA 4.0"
+  },
+  "unit": "move count per 100 valid nonblank human-labeled teacher sentences within each lesson",
+  "aggregation": "Unweighted distribution across eligible lessons; all seven valid teacher classes in denominator.",
+  "teacher_selection": "Student Tag native codes 1–5 take precedence. Otherwise use Teacher Tag codes 1,2,3,4,5,8,9, irrespective of Speaker value. Exclude blank sentences, missing tags, Context7, and undocumented codes6/128.",
+  "bootstrap": {
+    "unit": "lesson",
+    "resamples": 2000,
+    "seed": 42,
+    "interval": "Percentile 2.5 and 97.5 of bootstrap median",
+    "quantile_method": "numpy linear"
+  },
+  "data_quality": {
+    "native_files": 567,
+    "subsets": {
+      "Subset 1": 191,
+      "Subset 2": 376
+    },
+    "eligible_lessons": 566,
+    "excluded_zero_teacher_lessons": 1,
+    "teacher_sentences": 175073,
+    "teacher_native_label_counts": {
+      "1": 117641,
+      "2": 22834,
+      "3": 2874,
+      "4": 2631,
+      "5": 4010,
+      "8": 23044,
+      "9": 2039
+    },
+    "unknown_or_non_teacher_native_codes_excluded": {
+      "128": 1,
+      "6": 7,
+      "7": 6602
+    },
+    "identical_native_workbook_excess_files": 0,
+    "header_variants": {
+      "[null, \"TimeStamp\", \"Turn\", \"Speaker\", \"Sentence\", \"Teacher Tag\", \"Student Tag\"]": 527,
+      "[\"TimeStamp\", \"Turn\", \"Speaker\", \"Sentence\", \"Teacher Tag\", \"Student Tag\", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]": 1,
+      "[\"TimeStamp\", \"Turn\", \"Speaker\", \"Sentence\", \"Teacher Tag\", \"Student Tag\", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]": 4,
+      "[null, \"TImeStamp\", \"Turn\", \"Speaker\", \"Sentence\", \"Teacher Tag\", \"Student Tag\"]": 22,
+      "[null, \"TImeStamp\", \"Turn\", \"S\", \"Sentence\", \"Teacher Tag\", \"Student Tag\"]": 1,
+      "[null, \"Video Length\", \"Turn\", \"Speaker\", \"Sentence\", \"Teacher Tag\", \"Student Tag\"]": 5,
+      "[null, \"S\", \"Turn\", \"Speaker\", \"Sentence\", \"Teacher Tag\", \"Student Tag\"]": 5,
+      "[null, \"TimeStamp\", \"turn\", \"Speaker\", \"Sentence\", \"Teacher Tag\", \"Student Tag\"]": 1,
+      "[null, \"SS\", \"Turn\", \"Speaker\", \"Sentence\", \"Teacher Tag\", \"Student Tag\"]": 1
+    },
+    "auxiliary_Tags_sheets_ignored": 4,
+    "native_rows": 240967,
+    "missing_or_unparseable_teacher_tag_rows": 59207,
+    "teacher_rows_lost_if_literal_speaker_T_used": 31670,
+    "dual_valid_student_teacher_rows_excluded": 73,
+    "blank_sentence_valid_teacher_tag_rows": 4
+  },
+  "limitations": [
+    "Benchmark native workbooks and official model TSVs have distinct extraction histories and need not yield identical totals.",
+    "All eligible native lessons are used; the illustrative 504 count is not forced.",
+    "Descriptive K-12 mathematics reference rates are not causal targets or college teaching-quality scores."
+  ],
+  "moves": {
+    "keeping_together": {
+      "median": 13.612237019880332,
+      "p25": 9.733203195190878,
+      "p75": 19.165440838466488,
+      "ci95_median": [
+        12.78423772609819,
+        14.09406728618138
+      ],
+      "lessons": 566
+    },
+    "pressing_for_reasoning": {
+      "median": 0.6417119639817712,
+      "p25": 0.0,
+      "p75": 1.8461538461538463,
+      "ci95_median": [
+        0.4994388327721661,
+        0.7504810700876094
+      ],
+      "lessons": 566
+    },
+    "pressing_for_accuracy": {
+      "median": 13.708670471299477,
+      "p25": 9.869613721935574,
+      "p75": 17.96120546120546,
+      "ci95_median": [
+        12.8863853434054,
+        14.354066985645932
+      ],
+      "lessons": 566
+    },
+    "getting_students_to_relate": {
+      "median": 1.0976654529877918,
+      "p25": 0.0,
+      "p75": 3.0418397169666203,
+      "ci95_median": [
+        0.9203233365014538,
+        1.3245033112582782
+      ],
+      "lessons": 566
+    }
+  }
+}

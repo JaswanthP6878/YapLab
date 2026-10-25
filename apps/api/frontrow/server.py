@@ -29,6 +29,7 @@ from fastapi.responses import Response
 from pydantic import ValidationError
 from starlette.websockets import WebSocketDisconnect
 
+from . import teaching_moves
 from .clock import Clock, RealClock
 from .config import Config
 from .llm.base import LLMClient
@@ -176,7 +177,7 @@ def session_summary(session: Session) -> dict[str, Any]:
     talk = [c for c in session.transcript if getattr(c, "answer_to", None) is None]
     duration = talk[-1].end if talk else 0.0
     text = " ".join(c.text for c in talk)
-    return {
+    summary = {
         "session_id": session.id,
         "ticks": ticks,
         "questions": {
@@ -196,6 +197,10 @@ def session_summary(session: Session) -> dict[str, Any]:
             "longest_pause_seconds": longest_pause(talk),
         },
     }
+    moves = teaching_moves.analyze([c.text for c in session.transcript])
+    if moves is not None:
+        summary["teaching_moves"] = moves
+    return summary
 
 
 def create_app(
@@ -393,7 +398,7 @@ def create_app(
             raise HTTPException(
                 409, f"report not available yet (session is {session.state.value})"
             )
-        return session_summary(session)
+        return await asyncio.to_thread(session_summary, session)
 
     # --- WebSocket ----------------------------------------------------------
 
