@@ -18,7 +18,7 @@ import argparse
 import asyncio
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .clock import SimulatedClock
@@ -61,6 +61,7 @@ class ReplayResult:
     qa_pool: list[HandRaise]
     personas: dict[str, str]
     duration: float
+    llm_stats: dict = field(default_factory=dict)
 
 
 def load_scenario(path: Path) -> Scenario:
@@ -79,9 +80,12 @@ def load_scenario(path: Path) -> Scenario:
 
 
 def make_llm(kind: str) -> LLMClient:
-    """Build the LLM client for ``kind`` (``fake``, ``deepseek``, or ``openai``)."""
+    """Build a supported real provider, or the deterministic offline client."""
     if kind == "fake":
         return FakeLLM()
+    if kind == "anthropic":
+        from .llm.anthropic_client import AnthropicClient
+        return FallbackLLM(AnthropicClient())
     if kind in PROVIDERS:
         return FallbackLLM(OpenAIClient(provider=kind))
     raise ValueError(f"unknown llm kind: {kind!r}")
@@ -153,6 +157,7 @@ async def replay(
         qa_pool=session.moderator.qa_pool,
         personas={lid: lst.persona.name for lid, lst in session.listeners.items()},
         duration=duration,
+        llm_stats=session.llm_stats,
     )
 
 
@@ -239,6 +244,11 @@ def print_summary(result: ReplayResult) -> None:
           f"LLM fallbacks {fallbacks}")
 
 
+    if result.llm_stats.get("totals", {}).get("calls"):
+        print("\nLLM session usage (USD list prices; excludes voice and hosting):")
+        print(json.dumps(result.llm_stats, indent=2))
+
+
 def print_timeline(events: list[TimelineEvent]) -> None:
     print("\nTimeline:")
     for e in events:
@@ -248,8 +258,11 @@ def print_timeline(events: list[TimelineEvent]) -> None:
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(description="Replay a scripted talk through FrontRow.")
     p.add_argument("scenario", nargs="?", type=Path, default=DEFAULT_SCENARIO)
-    p.add_argument("--llm", default="fake", choices=["fake", *PROVIDERS])
+    p.add_argument("--llm", default="fake", choices=["fake", "anthropic", *PROVIDERS])
     p.add_argument("--model", default=None, help="model name (default from config)")
+    p.add_argument("--model-fast", help="override the reaction/summary model")
+    p.add_argument("--model-reasoning", help="override the answer-evaluation model")
+    p.add_argument("--stats-out", type=Path, help="write measured tokens, latency, fallback counts and cost as JSON")
     p.add_argument("--preset", default="default")
     p.add_argument("--tick", type=float, default=None, help="tick interval seconds")
     p.add_argument("--print-timeline", action="store_true")
@@ -259,19 +272,29 @@ def main(argv: list[str] | None = None) -> None:
     overrides: dict[str, object] = {}
     if args.model:
         overrides["llm_model"] = args.model
-    elif args.llm in PROVIDERS and not os.environ.get("FRONTROW_LLM_MODEL"):
-        overrides["llm_model"] = PROVIDERS[args.llm].default_model
+    if args.model_fast:
+        overrides["llm_model_fast"] = args.model_fast
+    if args.model_reasoning:
+        overrides["llm_model_reasoning"] = args.model_reasoning
     if args.tick:
         overrides["tick_interval_seconds"] = args.tick
         overrides["per_listener_timeout_seconds"] = min(10.0, args.tick * 2 / 3)
-    config = Config.from_env(**overrides)
+    config = Config.from_env(provider=args.llm, **overrides)
 
     scenario = load_scenario(args.scenario)
-    result = asyncio.run(
-        replay(scenario, llm=make_llm(args.llm), config=config, preset=args.preset)
-    )
-    print(f"llm={args.llm} model={config.llm_model} preset={args.preset} "
+    async def run() -> ReplayResult:
+        client = make_llm(args.llm)
+        try:
+            return await replay(scenario, llm=client, config=config, preset=args.preset)
+        finally:
+            close = getattr(client, "aclose", None)
+            if callable(close):
+                await close()
+    result = asyncio.run(run())
+    print(f"llm={args.llm} fast={config.llm_model_fast} reasoning={config.llm_model_reasoning} preset={args.preset} "
           f"tick={config.tick_interval_seconds:g}s\n")
+    if args.stats_out:
+        args.stats_out.write_text(json.dumps(result.llm_stats, indent=2) + "\n")
     print_summary(result)
     if args.print_timeline:
         print_timeline(result.events)

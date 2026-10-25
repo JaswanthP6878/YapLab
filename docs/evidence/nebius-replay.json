@@ -1,0 +1,85 @@
+{
+  "currency": "USD",
+  "scope": "Nebius inference only, at list prices; excludes voice and hosting",
+  "pricing_as_of": "2026-10-25",
+  "pricing_source": "https://api.tokenfactory.nebius.com/v1/models?verbose=true",
+  "tiers": {
+    "fast": {
+      "calls": 18,
+      "successes": 18,
+      "errors": 0,
+      "cancelled": 0,
+      "models": [
+        "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"
+      ],
+      "roles": {
+        "reaction": 15,
+        "summary": 3
+      },
+      "input_tokens": 8101,
+      "cached_input_tokens": 0,
+      "output_tokens": 1207,
+      "reasoning_tokens": 0,
+      "fallbacks": 0,
+      "usage_missing_calls": 0,
+      "unpriced_calls": 0,
+      "p50_latency_ms": 683.914,
+      "p95_latency_ms": 1070.138,
+      "known_cost_usd": 0.00077574,
+      "cost_usd": 0.00077574
+    },
+    "reasoning": {
+      "calls": 0,
+      "successes": 0,
+      "errors": 0,
+      "cancelled": 0,
+      "models": [],
+      "roles": {},
+      "input_tokens": 0,
+      "cached_input_tokens": 0,
+      "output_tokens": 0,
+      "reasoning_tokens": 0,
+      "fallbacks": 0,
+      "usage_missing_calls": 0,
+      "unpriced_calls": 0,
+      "p50_latency_ms": null,
+      "p95_latency_ms": null,
+      "known_cost_usd": 0.0,
+      "cost_usd": 0.0
+    }
+  },
+  "totals": {
+    "calls": 18,
+    "successes": 18,
+    "errors": 0,
+    "cancelled": 0,
+    "models": [
+      "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"
+    ],
+    "roles": {
+      "reaction": 15,
+      "summary": 3
+    },
+    "input_tokens": 8101,
+    "cached_input_tokens": 0,
+    "output_tokens": 1207,
+    "reasoning_tokens": 0,
+    "fallbacks": 0,
+    "usage_missing_calls": 0,
+    "unpriced_calls": 0,
+    "p50_latency_ms": 683.914,
+    "p95_latency_ms": 1070.138,
+    "known_cost_usd": 0.00077574,
+    "cost_usd": 0.00077574
+  },
+  "measurement_context": {
+    "scenario": "scenarios/sample_talk.json",
+    "scenario_sha256": "74618a33e47f9c5d541d0e5bdd522306aed56ef8ae7c5108db2febc179417651",
+    "scenario_duration_seconds": 40,
+    "clock": "SimulatedClock for scenario; wall-clock model request latencies",
+    "tick_interval_seconds": 15,
+    "moderator_warmup_seconds": 45,
+    "moderator_warmup_min_words": 60,
+    "note": "This short replay does not exercise answer grading. No full live-session or deployment claim."
+  }
+}

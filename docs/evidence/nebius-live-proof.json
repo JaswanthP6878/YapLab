@@ -1,0 +1,37 @@
+{
+  "session_id": "712731d49dc44c91ba69ee7670ef086c",
+  "talk_wall_seconds": 185.886,
+  "typed_lecture_lines": 18,
+  "hands": 3,
+  "verdicts": [
+    "answered"
+  ],
+  "audio": [
+    {
+      "question_id": "q8",
+      "bytes": 76947
+    }
+  ],
+  "stt_provider": "elevenlabs",
+  "stt_token_minted": true,
+  "fallback_events": 0,
+  "error_events": [],
+  "teaching_moves_present": true,
+  "environment": "local",
+  "duration_scope": "talk_wall_seconds measures start through completed report, including closing tick and Q&A.",
+  "stt_scope": "ElevenLabs Scribe token minting verified; microphone-audio transcription is not established by this typed smoke.",
+  "timeline_checks": {
+    "first_hand_seconds_after_start": 46.825102,
+    "first_answer_verdict_seconds_after_start": 48.801569,
+    "hand_grounding_sources": [
+      "transcript",
+      "transcript",
+      "transcript"
+    ],
+    "hand_seconds_after_start": [
+      46.825102,
+      124.147325,
+      183.783551
+    ]
+  }
+}

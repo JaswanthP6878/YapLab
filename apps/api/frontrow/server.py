@@ -74,7 +74,7 @@ _speech_logger.propagate = False
 
 
 def llm_from_env() -> Callable[[], LLMClient]:
-    """LLM factory from ``FRONTROW_LLM`` (fake, deepseek, openai, or anthropic)."""
+    """LLM factory from ``FRONTROW_LLM`` (fake, deepseek, openai, nebius, or anthropic)."""
     kind = os.environ.get("FRONTROW_LLM", "fake").strip() or "fake"
     if kind == "fake":
         return FakeLLM

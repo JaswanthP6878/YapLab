@@ -12,7 +12,7 @@ import asyncio
 from collections.abc import Callable
 from typing import Any
 
-from .base import LLMClient
+from .base import LLMClient, emit_llm_event
 from .fake import FakeLLM
 
 FallbackHook = Callable[[str], None]
@@ -44,8 +44,9 @@ class FallbackLLM(LLMClient):
                 await close()
             self._closed_clients.add(id(client))
 
-    def _note(self, reason: str) -> None:
+    def _note(self, reason: str, model: str) -> None:
         self.fallback_count += 1
+        emit_llm_event("fallback", provider=getattr(self.primary, "provider_name", type(self.primary).__name__), model=model, reason=reason)
         if self.on_fallback is not None:
             self.on_fallback(reason)
 
@@ -58,9 +59,9 @@ class FallbackLLM(LLMClient):
                 timeout,
             )
         except asyncio.TimeoutError:
-            self._note("timeout")
+            self._note("timeout", model)
         except Exception as exc:  # noqa: BLE001 - any primary failure falls back
-            self._note(f"error: {type(exc).__name__}")
+            self._note(f"error: {type(exc).__name__}", model)
         return await self.fallback.complete(
             system, user, model=model, timeout=timeout
         )
@@ -76,9 +77,9 @@ class FallbackLLM(LLMClient):
                 timeout,
             )
         except asyncio.TimeoutError:
-            self._note("timeout")
+            self._note("timeout", model)
         except Exception as exc:  # noqa: BLE001 - any primary failure falls back
-            self._note(f"error: {type(exc).__name__}")
+            self._note(f"error: {type(exc).__name__}", model)
         return await self.fallback.complete_json(
             system, user, model=model, timeout=timeout
         )

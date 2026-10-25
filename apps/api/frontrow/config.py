@@ -59,11 +59,11 @@ def _env_str(name: str, default: str) -> str:
     return raw
 
 
-def _default_model() -> str:
+def _default_model(provider: str | None = None) -> str:
     """Default model for the provider named by ``FRONTROW_LLM``."""
     from .llm.openai_client import PROVIDERS
 
-    name = _env_str("FRONTROW_LLM", "fake").strip().lower()
+    name = (provider or _env_str("FRONTROW_LLM", "fake")).strip().lower()
     if name == "anthropic":
         return "claude-haiku-5-5"
     provider = PROVIDERS.get(name)
@@ -85,6 +85,8 @@ class Config(BaseModel):
     transcript_window_seconds: float = Field(default=30.0, gt=0)
 
     llm_model: str = Field(default="gpt-4o-mini")
+    llm_model_fast: str | None = None
+    llm_model_reasoning: str | None = None
     llm_timeout_seconds: float = Field(default=30.0, gt=0)
 
     moderator_min_interruption_gap_seconds: float = Field(default=60.0, ge=0)
@@ -123,10 +125,12 @@ class Config(BaseModel):
                 f"({self.per_listener_timeout_seconds}) must be strictly less "
                 f"than tick_interval_seconds ({self.tick_interval_seconds})"
             )
+        self.llm_model_fast = self.llm_model_fast or self.llm_model
+        self.llm_model_reasoning = self.llm_model_reasoning or self.llm_model
         return self
 
     @classmethod
-    def from_env(cls, **overrides: object) -> "Config":
+    def from_env(cls, *, provider: str | None = None, **overrides: object) -> "Config":
         """Build a Config from environment variables with fallbacks.
 
         Explicit ``overrides`` take precedence over environment values.
@@ -139,6 +143,13 @@ class Config(BaseModel):
         except (TypeError, ValueError):
             effective_tick = tick_interval  # Config validation reports invalid overrides.
         listener_timeout_default = min(10.0, effective_tick * 2 / 3)
+        provider_name = (provider or _env_str("FRONTROW_LLM", "fake")).strip().lower()
+        legacy_override = overrides.get("llm_model") or os.environ.get("FRONTROW_LLM_MODEL", "").strip()
+        common_model = str(legacy_override) if legacy_override else _default_model(provider_name)
+        reasoning_default = common_model
+        if provider_name == "nebius" and not legacy_override:
+            from .llm.openai_client import PROVIDERS
+            reasoning_default = PROVIDERS["nebius"].default_reasoning_model or common_model
         values: dict[str, object] = {
             "tick_interval_seconds": tick_interval,
             "per_listener_timeout_seconds": _env_float(
@@ -147,7 +158,9 @@ class Config(BaseModel):
             "transcript_window_seconds": _env_float(
                 "FRONTROW_TRANSCRIPT_WINDOW_SECONDS", 30.0
             ),
-            "llm_model": _env_str("FRONTROW_LLM_MODEL", _default_model()),
+            "llm_model": common_model,
+            "llm_model_fast": _env_str("FRONTROW_LLM_MODEL_FAST", common_model),
+            "llm_model_reasoning": _env_str("FRONTROW_LLM_MODEL_REASONING", reasoning_default),
             "llm_timeout_seconds": _env_float("FRONTROW_LLM_TIMEOUT_SECONDS", 30.0),
             "moderator_min_interruption_gap_seconds": _env_float(
                 "FRONTROW_MODERATOR_GAP_SECONDS", 60.0

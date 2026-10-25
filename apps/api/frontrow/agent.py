@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from .clock import Clock
 from .grounding import check_grounding, validate_question_payload
-from .llm.base import LLMClient
+from .llm.base import LLMClient, LLMObserver, llm_call_context
 from .models import (
     AnswerVerdict,
     GroundedQuestion,
@@ -52,10 +52,13 @@ class Listener:
         listener_id: str,
         persona: Persona,
         llm: LLMClient,
+        *,
+        llm_observer: LLMObserver | None = None,
     ) -> None:
         self.listener_id = listener_id
         self.persona = persona
         self.llm = llm
+        self._llm_observer = llm_observer
         # Per-agent memory: list of (window_text, Reaction).
         self.memory: list[tuple[str, Reaction]] = []
         # The grounded question produced on the most recent react() call, if
@@ -119,9 +122,10 @@ class Listener:
             talk_summary=talk_summary,
             talk_elapsed_seconds=talk_elapsed_seconds,
         )
-        payload = await self.llm.complete_json(
-            system, user, model=model, timeout=timeout
-        )
+        with llm_call_context("fast", "reaction", self._llm_observer):
+            payload = await self.llm.complete_json(
+                system, user, model=model, timeout=timeout
+            )
 
         raw_attention = _as_score(payload.get("attention"), 50.0)
         raw_confusion = _as_score(payload.get("confusion"), 50.0)
@@ -185,9 +189,10 @@ class Listener:
         system, user = build_answer_prompt(
             self.persona, hand.question.question, hand.question.quote, answer_text
         )
-        payload = await self.llm.complete_json(
-            system, user, model=model, timeout=timeout
-        )
+        with llm_call_context("reasoning", "answer", self._llm_observer):
+            payload = await self.llm.complete_json(
+                system, user, model=model, timeout=timeout
+            )
         verdict = str(payload.get("verdict", "")).strip().lower()
         if verdict not in _VERDICTS:
             verdict = "partial"

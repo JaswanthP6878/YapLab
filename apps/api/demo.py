@@ -12,6 +12,10 @@ Live, using DeepSeek (needs DEEPSEEK_API_KEY in the environment):
 
     uv run --extra openai python demo.py --llm deepseek     # default model deepseek-flash
     uv run --extra openai python demo.py --llm deepseek --model deepseek-v4-pro
+
+Nebius Nemotron (fast listeners/summary, reasoning answer grading):
+
+    uv run --extra openai python demo.py --llm nebius --stats-out /tmp/nebius-replay.json
 """
 
 from frontrow.replay import main

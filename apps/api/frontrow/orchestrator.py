@@ -16,7 +16,7 @@ from collections.abc import Callable
 from .agent import Listener
 from .clock import Clock
 from .config import Config
-from .llm.base import LLMClient
+from .llm.base import LLMClient, LLMObserver, llm_call_context
 from .metrics import room_summary
 from .models import HandRaise, Reaction, Slide, TimelineEvent
 from .moderator import Moderator
@@ -39,6 +39,7 @@ class Orchestrator:
         slides: list[Slide] | None = None,
         event_sink: EventSink | None = None,
         summarizer: LLMClient | None = None,
+        llm_observer: LLMObserver | None = None,
     ) -> None:
         self._config = config
         self._clock = clock
@@ -55,6 +56,7 @@ class Orchestrator:
         # Rolling notes on the whole talk, refreshed after each tick by
         # ``summarizer`` and shared with every listener. None disables it.
         self._summarizer = summarizer
+        self._llm_observer = llm_observer
         self._talk_summary = ""
         self._summarized_until = 0.0
         self._talk_started_at: float | None = None
@@ -135,7 +137,7 @@ class Orchestrator:
             listener.react(
                 window_text,
                 self._slides,
-                model=self._config.llm_model,
+                model=self._config.llm_model_fast,
                 timeout=self._config.llm_timeout_seconds,
                 clock=self._clock,
                 grounding_min_chars=self._config.grounding_min_span_chars,
@@ -320,12 +322,13 @@ class Orchestrator:
             self._talk_summary, self._transcript.full_text(new)
         )
         try:
-            payload = await self._summarizer.complete_json(
-                system,
-                user,
-                model=self._config.llm_model,
-                timeout=self._config.llm_timeout_seconds,
-            )
+            with llm_call_context("fast", "summary", self._llm_observer):
+                payload = await self._summarizer.complete_json(
+                    system,
+                    user,
+                    model=self._config.llm_model_fast,
+                    timeout=self._config.llm_timeout_seconds,
+                )
         except Exception as exc:  # noqa: BLE001 - keep the previous notes
             self._emit("summary_error", tick=tick_index, error=type(exc).__name__)
             return
