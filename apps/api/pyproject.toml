@@ -18,6 +18,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Versions match the committed TalkMoves pipeline. Optional, report-only.
+data = [
+    "scikit-learn==1.7.2",
+    "joblib==1.5.2",
+]
 # Installed on demand for the real LLM client: uv sync --extra openai
 openai = [
     "openai>=1.0",
@@ -43,4 +48,4 @@ where = ["."]
 include = ["frontrow*"]
 
 [tool.setuptools.package-data]
-frontrow = ["voices.json"]
+frontrow = ["voices.json", "models/*.joblib", "models/*.json", "models/*.md", "models/*.txt"]

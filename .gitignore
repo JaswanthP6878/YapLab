@@ -8,6 +8,7 @@ infra/deploy.env
 # Remotion renders
 video/out/
 eval_runs/
+/data/raw/
 # Frontend build artifacts
 node_modules/
 frontend/node_modules/

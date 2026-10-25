@@ -1,0 +1,78 @@
+{
+  "method": "TF-IDF + logistic regression",
+  "accuracy": 0.7322905894519132,
+  "macro_f1": 0.5349510861539507,
+  "per_class": {
+    "0": {
+      "precision": 0.9102632177804748,
+      "recall": 0.768344218209758,
+      "f1-score": 0.8333043991528072,
+      "support": 15618.0
+    },
+    "1": {
+      "precision": 0.5371853546910755,
+      "recall": 0.6115271898404429,
+      "f1-score": 0.5719506624029237,
+      "support": 3071.0
+    },
+    "2": {
+      "precision": 0.3392857142857143,
+      "recall": 0.5588235294117647,
+      "f1-score": 0.4222222222222222,
+      "support": 306.0
+    },
+    "3": {
+      "precision": 0.21353558926487748,
+      "recall": 0.6203389830508474,
+      "f1-score": 0.3177083333333333,
+      "support": 295.0
+    },
+    "4": {
+      "precision": 0.15026697177726925,
+      "recall": 0.3505338078291815,
+      "f1-score": 0.21035771489588895,
+      "support": 562.0
+    },
+    "5": {
+      "precision": 0.6719062589311232,
+      "recall": 0.7643042912873862,
+      "f1-score": 0.7151330798479087,
+      "support": 3076.0
+    },
+    "6": {
+      "precision": 0.6005586592178771,
+      "recall": 0.7678571428571429,
+      "f1-score": 0.6739811912225705,
+      "support": 280.0
+    }
+  },
+  "labels": {
+    "0": "none",
+    "1": "keeping_together",
+    "2": "getting_students_to_relate",
+    "3": "restating",
+    "4": "revoicing",
+    "5": "pressing_for_accuracy",
+    "6": "pressing_for_reasoning"
+  },
+  "provenance": {
+    "revision": "869b9406de268ebab0f1b9a3bccde0b416b97290",
+    "repository": "https://github.com/SumnerLab/TalkMoves",
+    "license": "CC BY-NC-SA 4.0",
+    "train_sha256": "56e07126b975e4ee4dd0455d676e831dd1ccaf32771066006630c96828ccd0c8",
+    "test_sha256": "15ffeab09cbf726fb87fe2a2b158a5e0181c21e08e73551cea08509741f12d2d"
+  },
+  "artifact": {
+    "path": "apps/api/frontrow/models/talkmoves.joblib",
+    "bytes": 3886675,
+    "sha256": "614fd3fbc910ed7eebaef606582818105b8a79edadaaf3de88d47e2466f36bb5"
+  },
+  "versions": {
+    "python": "3.12.13",
+    "scikit-learn": "1.7.2",
+    "joblib": "1.5.2",
+    "numpy": "2.5.4",
+    "scipy": "1.18.1",
+    "matplotlib": "3.10.7"
+  }
+}

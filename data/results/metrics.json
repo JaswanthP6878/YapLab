@@ -1,0 +1,310 @@
+{
+  "method": "TF-IDF + logistic regression",
+  "accuracy": 0.7322905894519132,
+  "macro_f1": 0.5349510861539507,
+  "weighted_f1": 0.7540769420659786,
+  "per_class": {
+    "0": {
+      "precision": 0.9102632177804748,
+      "recall": 0.768344218209758,
+      "f1-score": 0.8333043991528072,
+      "support": 15618.0
+    },
+    "1": {
+      "precision": 0.5371853546910755,
+      "recall": 0.6115271898404429,
+      "f1-score": 0.5719506624029237,
+      "support": 3071.0
+    },
+    "2": {
+      "precision": 0.3392857142857143,
+      "recall": 0.5588235294117647,
+      "f1-score": 0.4222222222222222,
+      "support": 306.0
+    },
+    "3": {
+      "precision": 0.21353558926487748,
+      "recall": 0.6203389830508474,
+      "f1-score": 0.3177083333333333,
+      "support": 295.0
+    },
+    "4": {
+      "precision": 0.15026697177726925,
+      "recall": 0.3505338078291815,
+      "f1-score": 0.21035771489588895,
+      "support": 562.0
+    },
+    "5": {
+      "precision": 0.6719062589311232,
+      "recall": 0.7643042912873862,
+      "f1-score": 0.7151330798479087,
+      "support": 3076.0
+    },
+    "6": {
+      "precision": 0.6005586592178771,
+      "recall": 0.7678571428571429,
+      "f1-score": 0.6739811912225705,
+      "support": 280.0
+    }
+  },
+  "labels": {
+    "0": "none",
+    "1": "keeping_together",
+    "2": "getting_students_to_relate",
+    "3": "restating",
+    "4": "revoicing",
+    "5": "pressing_for_accuracy",
+    "6": "pressing_for_reasoning"
+  },
+  "training": {
+    "rows": 150644,
+    "official_test_rows": 23208,
+    "refit_seconds": 14.713402458000928,
+    "selected_C": 4,
+    "class_weight": "balanced",
+    "solver": "lbfgs",
+    "max_iter": 1000,
+    "features": {
+      "ngram_range": [
+        1,
+        2
+      ],
+      "max_features": 60000,
+      "sublinear_tf": true,
+      "lowercase": true,
+      "actual_features": 60000,
+      "input": "text_a + ' [SEP] ' + text_b"
+    }
+  },
+  "validation": {
+    "source": "official training split only",
+    "fraction": 0.1,
+    "stratified": true,
+    "seed": 42,
+    "fit_rows": 135579,
+    "validation_rows": 15065,
+    "selection_metric": "seven-class macro-F1",
+    "candidates": [
+      {
+        "C": 1,
+        "macro_f1": 0.5420560649381937,
+        "accuracy": 0.7164288084965151,
+        "fit_seconds": 8.424379125004634,
+        "iterations": [
+          239
+        ]
+      },
+      {
+        "C": 2,
+        "macro_f1": 0.556148131727854,
+        "accuracy": 0.7361433786923333,
+        "fit_seconds": 9.610907500027679,
+        "iterations": [
+          275
+        ]
+      },
+      {
+        "C": 4,
+        "macro_f1": 0.5612478388682285,
+        "accuracy": 0.7500829737802854,
+        "fit_seconds": 11.7259825419751,
+        "iterations": [
+          328
+        ]
+      }
+    ],
+    "validation_rows_with_feature_pair_in_fit": 2895
+  },
+  "official_test_evaluations": 1,
+  "data_quality": {
+    "raw_train": {
+      "rows": 150918,
+      "columns": [
+        "text_a",
+        "text_b",
+        "labels"
+      ],
+      "empty_context_rows": 119875,
+      "empty_target_rows": 274,
+      "labels": {
+        "0": 101309,
+        "1": 19704,
+        "2": 2556,
+        "3": 2305,
+        "4": 3436,
+        "5": 19849,
+        "6": 1759
+      },
+      "exact_duplicate_excess_rows": 22901,
+      "normalized_duplicate_excess_rows": 23619,
+      "conflicting_normalized_feature_groups": 812,
+      "rows_in_conflicting_feature_groups": 14091
+    },
+    "raw_test": {
+      "rows": 23250,
+      "columns": [
+        "text_a",
+        "text_b",
+        "labels"
+      ],
+      "empty_context_rows": 18631,
+      "empty_target_rows": 42,
+      "labels": {
+        "0": 15648,
+        "1": 3072,
+        "2": 306,
+        "3": 306,
+        "4": 562,
+        "5": 3076,
+        "6": 280
+      },
+      "exact_duplicate_excess_rows": 2774,
+      "normalized_duplicate_excess_rows": 2794,
+      "conflicting_normalized_feature_groups": 88,
+      "rows_in_conflicting_feature_groups": 1795
+    },
+    "clean_train": {
+      "rows": 150644,
+      "columns": [
+        "text_a",
+        "text_b",
+        "labels"
+      ],
+      "empty_context_rows": 119654,
+      "empty_target_rows": 0,
+      "labels": {
+        "0": 101201,
+        "1": 19704,
+        "2": 2556,
+        "3": 2145,
+        "4": 3431,
+        "5": 19848,
+        "6": 1759
+      },
+      "exact_duplicate_excess_rows": 22683,
+      "normalized_duplicate_excess_rows": 23401,
+      "conflicting_normalized_feature_groups": 811,
+      "rows_in_conflicting_feature_groups": 13870
+    },
+    "clean_test": {
+      "rows": 23208,
+      "columns": [
+        "text_a",
+        "text_b",
+        "labels"
+      ],
+      "empty_context_rows": 18598,
+      "empty_target_rows": 0,
+      "labels": {
+        "0": 15618,
+        "1": 3071,
+        "2": 306,
+        "3": 295,
+        "4": 562,
+        "5": 3076,
+        "6": 280
+      },
+      "exact_duplicate_excess_rows": 2743,
+      "normalized_duplicate_excess_rows": 2763,
+      "conflicting_normalized_feature_groups": 87,
+      "rows_in_conflicting_feature_groups": 1762
+    },
+    "empty_target_policy": "Drop empty/whitespace text_b only; keep literal words such as None; retain empty text_a as missing previous-student context.",
+    "shared_normalized_feature_pairs_train_test": 951,
+    "test_rows_with_feature_pair_in_train": 3401,
+    "test_rows_with_teacher_text_in_train": 4468
+  },
+  "provenance": {
+    "revision": "869b9406de268ebab0f1b9a3bccde0b416b97290",
+    "repository": "https://github.com/SumnerLab/TalkMoves",
+    "license": "CC BY-NC-SA 4.0",
+    "train_sha256": "56e07126b975e4ee4dd0455d676e831dd1ccaf32771066006630c96828ccd0c8",
+    "test_sha256": "15ffeab09cbf726fb87fe2a2b158a5e0181c21e08e73551cea08509741f12d2d"
+  },
+  "artifact": {
+    "path": "apps/api/frontrow/models/talkmoves.joblib",
+    "bytes": 3886675,
+    "sha256": "614fd3fbc910ed7eebaef606582818105b8a79edadaaf3de88d47e2466f36bb5"
+  },
+  "versions": {
+    "python": "3.12.13",
+    "scikit-learn": "1.7.2",
+    "joblib": "1.5.2",
+    "numpy": "2.5.4",
+    "scipy": "1.18.1",
+    "matplotlib": "3.10.7"
+  },
+  "confusion_matrix": [
+    [
+      12000,
+      1335,
+      158,
+      399,
+      856,
+      798,
+      72
+    ],
+    [
+      580,
+      1878,
+      108,
+      137,
+      129,
+      222,
+      17
+    ],
+    [
+      27,
+      34,
+      171,
+      1,
+      5,
+      54,
+      14
+    ],
+    [
+      60,
+      13,
+      4,
+      183,
+      26,
+      9,
+      0
+    ],
+    [
+      208,
+      49,
+      2,
+      65,
+      197,
+      40,
+      1
+    ],
+    [
+      295,
+      174,
+      52,
+      71,
+      94,
+      2351,
+      39
+    ],
+    [
+      13,
+      13,
+      9,
+      1,
+      4,
+      25,
+      215
+    ]
+  ],
+  "limitations": [
+    "Official TSV rows lack lesson identifiers: validation is row-stratified, not lesson-grouped.",
+    "Repeated short phrases/context pairs across splits can inflate apparent generalization; official partitions are preserved for comparability.",
+    "Upstream text_a is the previous student utterance; live inference supplies the previous presenter sentence, a context distribution shift.",
+    "Macro-F1 includes None and is not directly comparable to published talk-move-only F1.",
+    "K-12 mathematics discourse is not a validated college-presentation or teaching-quality score."
+  ],
+  "elapsed_seconds": 47.41506504203426
+}
