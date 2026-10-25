@@ -117,6 +117,15 @@ class Config(BaseModel):
     # Maximum number of pooled questions asked in the Q&A phase.
     qa_max_questions: int = Field(default=5, ge=0)
 
+    # Public-demo lifetime and admission limits (one API worker).
+    idle_end_seconds: float = Field(default=60.0, gt=0, allow_inf_nan=False)
+    max_session_seconds: float = Field(default=1200.0, gt=0, allow_inf_nan=False)
+    session_retention_seconds: float = Field(default=3600.0, ge=0, allow_inf_nan=False)
+    max_live_sessions: int = Field(default=20, ge=1)
+    sessions_per_ip_per_hour: int = Field(default=6, ge=1)
+    stt_tokens_per_session: int = Field(default=10, ge=1)
+    max_sessions_per_day: int = Field(default=150, ge=1)
+
     @model_validator(mode="after")
     def _check_timeout_below_interval(self) -> "Config":
         if self.per_listener_timeout_seconds >= self.tick_interval_seconds:
@@ -174,6 +183,13 @@ class Config(BaseModel):
             "grounding_min_span_chars": _env_int(
                 "FRONTROW_GROUNDING_MIN_SPAN_CHARS", 10
             ),
+            "idle_end_seconds": _env_float("FRONTROW_IDLE_END_SECONDS", 60.0),
+            "max_session_seconds": _env_float("FRONTROW_MAX_SESSION_SECONDS", 1200.0),
+            "session_retention_seconds": _env_float("FRONTROW_SESSION_RETENTION_SECONDS", 3600.0),
+            "max_live_sessions": _env_int("FRONTROW_MAX_LIVE_SESSIONS", 20),
+            "sessions_per_ip_per_hour": _env_int("FRONTROW_SESSIONS_PER_IP_PER_HOUR", 6),
+            "stt_tokens_per_session": _env_int("FRONTROW_STT_TOKENS_PER_SESSION", 10),
+            "max_sessions_per_day": _env_int("FRONTROW_MAX_SESSIONS_PER_DAY", 150),
         }
         values.update(overrides)
         return cls(**values)

@@ -18,12 +18,13 @@ import asyncio
 import contextlib
 import json
 import logging
+import math
 import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import ValidationError
@@ -36,6 +37,7 @@ from .llm.base import LLMClient
 from .llm.fake import FakeLLM
 from .llm.fallback import FallbackLLM
 from .llm.openai_client import PROVIDERS, OpenAIClient
+from .limits import DemoLimits, LimitExceeded, client_ip
 from .metrics import filler_count, longest_pause, speaking_rate, word_count
 from .models import SessionState, Slide, TimelineEvent
 from .personas import ROOM_PRESETS
@@ -64,6 +66,7 @@ from .speech import (
 _SPOKEN_EVENTS = ("hand_raised", "qa_question")
 # Per-client outbound buffer; a client this far behind is disconnected.
 _CLIENT_QUEUE_MAX = 1000
+_RESOURCE_CLOSE_TIMEOUT_SECONDS = 5.0
 
 # Speech generation measurements must be visible under the normal uvicorn command.
 _speech_logger = logging.getLogger("frontrow.speech_elevenlabs")
@@ -127,6 +130,7 @@ class _Client:
         default_factory=lambda: asyncio.Queue(maxsize=_CLIENT_QUEUE_MAX)
     )
     overflowed: bool = False
+    ws: WebSocket | None = None
 
 
 @dataclass(eq=False)
@@ -139,6 +143,19 @@ class _Live:
     tasks: set[asyncio.Task[None]] = field(default_factory=set)
     # Serializes commands from several connected clients.
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    created_at: float = 0.0
+    disconnected_since: float | None = None
+    ended_at: float | None = None
+    closing: bool = False
+    closed: bool = False
+    evicted: bool = False
+    stt_attempts: int = 0
+    llm: LLMClient | None = None
+    resource_released: bool = False
+    cleanup_task: asyncio.Task | None = None
+
+
+_ACTIVE_STATES = {SessionState.IDLE, SessionState.PRESENTING, SessionState.QA}
 
 
 def _event_out(e: TimelineEvent) -> dict[str, Any]:
@@ -210,6 +227,8 @@ def create_app(
     tts: TTSEngine | None = None,
     stt_tokens: STTTokenProvider | None = None,
     clock_factory: Callable[[], Clock] = RealClock,
+    lifecycle_clock: Clock | None = None,
+    limits: DemoLimits | None = None,
 ) -> FastAPI:
     """Build the app. Every dependency is injectable for tests."""
     base_config = config or Config.from_env()
@@ -220,39 +239,185 @@ def create_app(
     tts_engine = tts if tts is not None else _tts_from_env(_speech_provider_kind("FRONTROW_TTS"))
     stt_provider = stt_tokens if stt_tokens is not None else _stt_from_env(_speech_provider_kind("FRONTROW_STT"))
     sessions: dict[str, _Live] = {}
+    life_clock = lifecycle_clock or RealClock()
+    admission = limits or DemoLimits(
+        sessions_per_ip_per_hour=base_config.sessions_per_ip_per_hour,
+        max_sessions_per_day=base_config.max_sessions_per_day,
+    )
+    pending_creations = 0
+    stopping = False
+    cleanup_tasks: set[asyncio.Task] = set()
+    resource_close_tasks: set[asyncio.Task] = set()
+    upload_jobs: set[asyncio.Task] = set()
+    upload_slot = asyncio.Semaphore(1)
+    # References include fail-fast validation and global speech engines, so an
+    # injected factory sharing a client never loses it while another room uses it.
+    owned: dict[int, tuple[Any, int]] = {}
+
+    def retain(resource: Any) -> None:
+        key = id(resource)
+        previous = owned.get(key)
+        owned[key] = (resource, (previous[1] if previous else 0) + 1)
+
+    async def close_resource(resource: Any) -> None:
+        close = getattr(resource, "aclose", None)
+        if callable(close):
+            try:
+                await asyncio.wait_for(close(), _RESOURCE_CLOSE_TIMEOUT_SECONDS)
+            except Exception:
+                logging.getLogger("frontrow.lifecycle").warning("session_resource_close_failed")
+
+    async def release(resource: Any) -> None:
+        key = id(resource)
+        previous = owned.get(key)
+        if previous is None:
+            return
+        if previous[1] > 1:
+            owned[key] = (resource, previous[1] - 1)
+            return
+        del owned[key]
+        # Ownership is released once. Its close operation has an independent
+        # lifetime, so cancelling an idle-end job cannot abandon an SDK mid-close.
+        task = asyncio.create_task(close_resource(resource))
+        resource_close_tasks.add(task)
+        task.add_done_callback(resource_close_tasks.discard)
+        await asyncio.shield(task)
+
+    for resource in (validation_llm, tts_engine, stt_provider):
+        retain(resource)
+
+    def track_cleanup(task: asyncio.Task) -> None:
+        cleanup_tasks.add(task)
+        def done(completed: asyncio.Task) -> None:
+            cleanup_tasks.discard(completed)
+            if not completed.cancelled() and completed.exception() is not None:
+                logging.getLogger("frontrow.lifecycle").warning("session_cleanup_failed")
+        task.add_done_callback(done)
+
+    def disconnected(live: _Live, client: _Client) -> None:
+        live.clients.discard(client)
+        if not live.clients and live.disconnected_since is None:
+            live.disconnected_since = life_clock.now()
+
+    async def stop_live(live: _Live) -> None:
+        """Stop producers before cancelling speech and releasing room ownership."""
+        if live.closed:
+            return
+        live.closing = True
+        await live.session.close()
+        tasks = list(live.tasks)
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        if not live.resource_released and live.llm is not None:
+            live.resource_released = True
+            await release(live.llm)
+        live.closed = True
+        live.closing = False
+        if live.ended_at is None:
+            live.ended_at = life_clock.now()
+
+    async def finish_live(live: _Live, reason: str) -> None:
+        if live.evicted or live.closed:
+            return
+        now = life_clock.now()
+        if reason == "idle" and (live.clients or live.disconnected_since is None
+                or now - live.disconnected_since < base_config.idle_end_seconds):
+            return
+        # A command may own live.lock while awaiting inference. Stop producers
+        # before waiting for that lock, or a slow end command defeats the cutoff.
+        # No await separates the grace recheck from marking the run as closing.
+        live.closing = True
+        await live.session.close()
+        async with live.lock:
+            if live.evicted:
+                return
+            if live.closed:
+                if live.session.state is SessionState.REPORTING:
+                    live.session.finish()
+                return
+            await live.session.end_for_report()
+            await stop_live(live)
+
+    async def evict_live(live: _Live) -> None:
+        async with live.lock:
+            if live.evicted or live.ended_at is None:
+                return
+            if life_clock.now() - live.ended_at < base_config.session_retention_seconds:
+                return
+            await stop_live(live)
+            live.evicted = True
+            sessions.pop(live.session.id, None)
+            clients = list(live.clients)
+            live.clients.clear()
+        # Registry mutation has finished; socket I/O never holds a global lock.
+        for client in clients:
+            if client.ws is not None:
+                with contextlib.suppress(Exception):
+                    await client.ws.close(code=4404, reason="session expired")
+
+    def start_sweep() -> None:
+        now = life_clock.now()
+        for live in list(sessions.values()):
+            if live.cleanup_task is not None and not live.cleanup_task.done():
+                continue
+            job = None
+            if live.ended_at is not None and now - live.ended_at >= base_config.session_retention_seconds:
+                job = evict_live(live)
+            elif not live.closed:
+                if live.session.state not in _ACTIVE_STATES:
+                    job = finish_live(live, "finished")
+                elif now - live.created_at >= base_config.max_session_seconds:
+                    job = finish_live(live, "max_age")
+                elif not live.clients and live.disconnected_since is not None and now - live.disconnected_since >= base_config.idle_end_seconds:
+                    job = finish_live(live, "idle")
+            if job is not None:
+                live.cleanup_task = asyncio.create_task(job)
+                track_cleanup(live.cleanup_task)
+
+    async def sweep_sessions() -> None:
+        """Deterministic test/admin seam; the background scanner does not wait."""
+        for _ in range(2):  # A zero retention period can evict a just-ended room.
+            start_sweep()
+            tasks = list(cleanup_tasks)
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def maintain() -> None:
+        while True:
+            start_sweep()
+            await life_clock.sleep(1.0)
 
     @contextlib.asynccontextmanager
     async def lifespan(_app: FastAPI):
+        nonlocal stopping
+        maintenance = asyncio.create_task(maintain())
+        _app.state.maintenance_task = maintenance
         try:
             yield
         finally:
-            for live in sessions.values():
-                # A settling tick can still raise a hand and enqueue speech while
-                # close() waits for it. Stop that producer before taking the snapshot.
-                await live.session.close()
-                tasks = list(live.tasks)
-                for task in tasks:
-                    task.cancel()
-                await asyncio.gather(*tasks, return_exceptions=True)
-            # Each room shares one LLM across its listeners, and injected
-            # factories may share it across rooms (or with fail-fast validation).
-            resources = [tts_engine, stt_provider, validation_llm]
-            resources.extend(
-                listener.llm
-                for live in sessions.values()
-                for listener in live.session.listeners.values()
-            )
-            closed: set[int] = set()
-            for resource in resources:
-                close = getattr(resource, "aclose", None)
-                if callable(close) and id(resource) not in closed:
-                    closed.add(id(resource))
-                    await close()
+            stopping = True
+            maintenance.cancel()
+            await asyncio.gather(maintenance, return_exceptions=True)
+            jobs = list(cleanup_tasks)
+            for task in jobs:
+                task.cancel()
+            await asyncio.gather(*jobs, return_exceptions=True)
+            await asyncio.gather(*(stop_live(live) for live in list(sessions.values())))
+            # A cancelled request cannot stop Python work already running in a
+            # thread. Its extraction retains the single permit until completion.
+            await asyncio.gather(*list(upload_jobs), return_exceptions=True)
+            for resource in (validation_llm, tts_engine, stt_provider):
+                await release(resource)
+            await asyncio.gather(*list(resource_close_tasks), return_exceptions=True)
 
     app = FastAPI(title="FrontRow", lifespan=lifespan)
+    app.state.sessions = sessions
+    app.state.sweep_sessions = sweep_sessions
     origins = os.environ.get("FRONTROW_CORS_ORIGINS", "*").split(",")
     app.add_middleware(
-        CORSMiddleware, allow_origins=origins, allow_methods=["*"], allow_headers=["*"]
+        CORSMiddleware, allow_origins=origins, allow_methods=["*"], allow_headers=["*"],
+        expose_headers=["Retry-After"],
     )
 
     # --- session plumbing ---------------------------------------------------
@@ -263,26 +428,50 @@ def create_app(
             raise HTTPException(404, f"session {session_id!r} not found")
         return live
 
+    def active_count() -> int:
+        return sum(live.session.state in _ACTIVE_STATES for live in sessions.values())
+
+    def reserve_creation(request: Request | None):
+        nonlocal pending_creations
+        if stopping or active_count() + pending_creations >= base_config.max_live_sessions:
+            raise HTTPException(503, "The practice room is busy. Try again in a few minutes.",
+                                headers={"Retry-After": str(max(1, math.ceil(base_config.idle_end_seconds)))})
+        peer = request.client.host if request is not None and request.client else None
+        forwarded = request.headers.get("x-forwarded-for") if request is not None else None
+        try:
+            ticket = admission.reserve_session(client_ip(peer, forwarded))
+        except LimitExceeded as exc:
+            raise HTTPException(exc.status_code, exc.message,
+                                headers={"Retry-After": str(exc.retry_after)}) from exc
+        # No await separates the live-cap check, quota reservation and slot claim.
+        pending_creations += 1
+        return ticket
+
     def publish(live: _Live, message: dict[str, Any]) -> None:
         for client in list(live.clients):
             try:
                 client.queue.put_nowait(message)
             except asyncio.QueueFull:
                 client.overflowed = True
-                live.clients.discard(client)
+                disconnected(live, client)
 
     async def synthesize(live: _Live, event: TimelineEvent) -> None:
+        if live.closing or live.closed or live.evicted:
+            return
         data = event.data
         qid = data["question_id"]
         record = live.session.orchestrator.record
         if qid not in live.audio:
             try:
-                live.audio[qid] = await tts_engine.synthesize(
+                audio = await tts_engine.synthesize(
                     data["question"], persona=data["persona"], listener_id=data["listener"]
                 )
             except Exception as exc:  # noqa: BLE001 - audio is best effort
                 record("question_audio_failed", question_id=qid, error=str(exc)[:200])
                 return
+            if live.closing or live.closed or live.evicted:
+                return
+            live.audio[qid] = audio
         record(
             "question_audio",
             question_id=qid,
@@ -295,7 +484,7 @@ def create_app(
         if live is None:
             return
         publish(live, _event_out(event))
-        if event.type in _SPOKEN_EVENTS and not isinstance(tts_engine, NoTTS):
+        if not (live.closing or live.closed or live.evicted) and event.type in _SPOKEN_EVENTS and not isinstance(tts_engine, NoTTS):
             task = asyncio.get_running_loop().create_task(synthesize(live, event))
             live.tasks.add(task)
             task.add_done_callback(live.tasks.discard)
@@ -320,42 +509,82 @@ def create_app(
             except ValidationError as exc:
                 raise HTTPException(400, f"invalid tick_interval_seconds: {tick}") from exc
         session_ref: list[str] = []
+        llm = make_llm()
         session = Session(
             config=cfg,
             clock=clock_factory(),
-            llm=make_llm(),
+            llm=llm,
             slides=slides,
             preset=preset,
             event_sink=lambda e: on_event(session_ref[0], e),
         )
         session_ref.append(session.id)
-        sessions[session.id] = _Live(session=session)
+        retain(llm)
+        now = life_clock.now()
+        sessions[session.id] = _Live(session=session, llm=llm,
+                                     created_at=now, disconnected_since=now)
         return session
 
     # --- REST ---------------------------------------------------------------
 
     @app.get("/health")
     async def health() -> dict[str, Any]:
-        return {"ok": True, "sessions": len(sessions)}
+        live = active_count()
+        return {"ok": True, "sessions": len(sessions), "live_sessions": live,
+                "retained_sessions": len(sessions) - live}
 
     @app.post("/sessions", status_code=201, response_model=SessionInfo)
-    async def create_session(body: CreateSessionRequest) -> SessionInfo:
-        slides = [Slide(index=i, text=s.text) for i, s in enumerate(body.slides)]
-        return session_info(new_session(body.preset, slides, body.tick_interval_seconds))
+    async def create_session(body: CreateSessionRequest, request: Request = None) -> SessionInfo:
+        nonlocal pending_creations
+        ticket = reserve_creation(request)
+        try:
+            slides = [Slide(index=i, text=s.text) for i, s in enumerate(body.slides)]
+            result = session_info(new_session(body.preset, slides, body.tick_interval_seconds))
+            ticket.commit()
+            return result
+        except BaseException:
+            ticket.rollback()
+            raise
+        finally:
+            pending_creations -= 1
 
     @app.post("/sessions/upload", status_code=201, response_model=SessionInfo)
     async def upload_session(
         file: UploadFile = File(...),
         preset: str = Form("default"),
         tick_interval_seconds: float | None = Form(None),
+        request: Request = None,
     ) -> SessionInfo:
-        data = await file.read(MAX_UPLOAD_BYTES + 1)
+        nonlocal pending_creations
+        ticket = reserve_creation(request)
         try:
-            slides = extract_slides(data)
-        except SlideError as exc:
-            status = 413 if len(data) > MAX_UPLOAD_BYTES else 400
-            raise HTTPException(status, str(exc)) from exc
-        return session_info(new_session(preset, slides, tick_interval_seconds))
+            await upload_slot.acquire()
+            try:
+                data = await file.read(MAX_UPLOAD_BYTES + 1)
+                extraction = asyncio.create_task(asyncio.to_thread(extract_slides, data))
+            except BaseException:
+                upload_slot.release()
+                raise
+            upload_jobs.add(extraction)
+            def extracted(job: asyncio.Task) -> None:
+                upload_jobs.discard(job)
+                upload_slot.release()
+                if not job.cancelled():
+                    job.exception()  # Retrieve failures even if the request went away.
+            extraction.add_done_callback(extracted)
+            try:
+                slides = await asyncio.shield(extraction)
+            except SlideError as exc:
+                status = 413 if len(data) > MAX_UPLOAD_BYTES else 400
+                raise HTTPException(status, str(exc)) from exc
+            result = session_info(new_session(preset, slides, tick_interval_seconds))
+            ticket.commit()
+            return result
+        except BaseException:
+            ticket.rollback()
+            raise
+        finally:
+            pending_creations -= 1
 
     @app.get("/sessions/{session_id}", response_model=SessionInfo)
     async def get_session(session_id: str) -> SessionInfo:
@@ -369,14 +598,30 @@ def create_app(
     @app.post("/sessions/{session_id}/stt-token")
     async def stt_token(session_id: str) -> dict[str, Any]:
         live = get_live(session_id)
-        if live.session.state not in (SessionState.IDLE, SessionState.PRESENTING, SessionState.QA):
+        if live.closing or live.closed or live.session.state not in _ACTIVE_STATES:
             raise HTTPException(409, f"session is {live.session.state.value}")
+        if live.stt_attempts >= base_config.stt_tokens_per_session:
+            remaining = max(1, math.ceil(base_config.max_session_seconds - (life_clock.now() - live.created_at)))
+            raise HTTPException(429, "This session has reached its voice-token limit. Continue by typing to the room, or start a new session.",
+                                headers={"Retry-After": str(remaining)})
+        # Count attempts before the provider await; an unconfirmed issuance may
+        # still cost money, and concurrent requests cannot oversubscribe the cap.
+        live.stt_attempts += 1
+        job = asyncio.create_task(stt_provider.create_token(session_id))
+        live.tasks.add(job)
+        job.add_done_callback(live.tasks.discard)
         try:
-            token = await stt_provider.create_token(session_id)
+            token = await job
+        except asyncio.CancelledError:
+            if live.closing or live.closed or live.evicted:
+                raise HTTPException(409, "This practice session has ended.") from None
+            raise
         except SpeechNotConfigured as exc:
             raise HTTPException(501, str(exc)) from exc
         except Exception as exc:  # noqa: BLE001 - surface provider failures as 502
             raise HTTPException(502, f"STT token provider failed: {exc}") from exc
+        if live.closing or live.closed or live.evicted:
+            raise HTTPException(409, "This practice session has ended.")
         return {
             "token": token.token,
             "provider": token.provider,
@@ -450,9 +695,23 @@ def create_app(
             ).model_dump(mode="json")
         async with live.lock:
             try:
-                result = await dispatch(live.session, msg)
+                if (live.closing or live.closed or live.evicted) and msg.type not in ("finish", "ping", "playback_ended"):
+                    raise SessionError("session has ended")
+                if msg.type == "finish" and live.session.state is SessionState.ENDED:
+                    result = {}
+                else:
+                    result = await dispatch(live.session, msg)
+                if live.session.state not in _ACTIVE_STATES:
+                    await stop_live(live)
             except SessionError as exc:
                 return ErrorMessage(id=msg.id, request=msg.type, message=str(exc)).model_dump(mode="json")
+            except asyncio.CancelledError:
+                # A policy cutoff can cancel a child tick awaited by this command.
+                # External cancellation of the WebSocket task must still propagate.
+                task = asyncio.current_task()
+                if live.closing and task is not None and not task.cancelling():
+                    return ErrorMessage(id=msg.id, request=msg.type, message="session has ended").model_dump(mode="json")
+                raise
         return AckMessage(id=msg.id, request=msg.type, result=result).model_dump(mode="json")
 
     async def pump(ws: WebSocket, client: _Client) -> None:
@@ -473,7 +732,7 @@ def create_app(
             await ws.close(code=4404, reason="session not found")
             return
 
-        client = _Client()
+        client = _Client(ws=ws)
         # Queue the hello and subscribe with no await in between, so the
         # backlog and the live stream neither overlap nor leave a gap.
         hello = HelloMessage(
@@ -484,6 +743,7 @@ def create_app(
         )
         client.queue.put_nowait(hello.model_dump(mode="json"))
         live.clients.add(client)
+        live.disconnected_since = None
         sender = asyncio.create_task(pump(ws, client))
         try:
             while True:
@@ -494,7 +754,7 @@ def create_app(
             # RuntimeError: the socket was already closed (e.g. client too slow).
             pass
         finally:
-            live.clients.discard(client)
+            disconnected(live, client)
             sender.cancel()
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await sender

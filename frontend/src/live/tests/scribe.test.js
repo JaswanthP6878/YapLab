@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ScribeSpeechController, TranscriptSequences, pcmDurationSeconds,
   scribeConnectOptions, transcriptDuration } from '../scribeController.js';
+import { createApiClient } from '../client.js';
+import { createTalkLifecycle } from '../talkLifecycle.js';
 
 const PCM = Buffer.alloc(8192).toString('base64'); // 0.256 seconds, not milliseconds.
 const token = { token: 'ephemeral', provider: 'elevenlabs', model_id: 'scribe_v2_realtime',
@@ -82,6 +84,83 @@ function harness({ getToken, connectGate, request } = {}) {
     audio: () => current.send({ audioBase64: PCM }),
   };
 }
+
+for (const status of [429, 503]) {
+  for (const phase of ['idle', 'presenting', 'qa']) {
+    test(`STT ${status} stops microphone startup but typed input remains usable in ${phase}`, async () => {
+      let fetches = 0;
+      const api = createApiClient({ fetchImpl: async () => {
+        fetches += 1;
+        return new Response(JSON.stringify({ detail: 'The microphone is temporarily unavailable.' }), {
+          status, headers: { 'Retry-After': '120' },
+        });
+      } });
+      let run;
+      const h = harness({ getToken: (id, options) => api.getSttToken(id, options),
+        request: async (type) => {
+          if (type === 'start') run.phase = 'presenting';
+          if (type === 'transcript') assert.ok(['presenting', 'qa'].includes(run.phase));
+          return { accepted: true };
+        } });
+      run = { alive: true, phase, transportConnected: true, starting: null,
+        socket: h.context.connection, slideSync: { synchronize: async () => {} } };
+      const talk = createTalkLifecycle(run, { request: h.context.connection.request,
+        changePhase: (value) => { run.phase = value; }, sendText: (text) => h.controller.sendText(text) });
+
+      assert.equal(await h.controller.start(), false);
+      assert.equal(fetches, 1);
+      assert.equal(h.sdkConnections.length, 0, 'no microphone may start after a rejected token');
+      assert.equal(h.tokenCalls[0].signal.aborted, true);
+      assert.equal(h.controller.active, false);
+      assert.equal(h.controller.wanted, false);
+      assert.equal(h.states.at(-1), 'error');
+      assert.match(h.errors.at(-1), /microphone is temporarily unavailable.*Try again in 2 minutes.*You can keep typing/);
+      assert.equal(h.context.connectionState, 'connected');
+      assert.equal(run.phase, phase, 'a speech-only failure must not change the session phase');
+
+      h.context.connectionState = 'reconnecting'; h.controller.updateContext();
+      h.context.connectionState = 'connected'; h.controller.updateContext();
+      h.controller.updateContext();
+      await flush();
+      assert.equal(fetches, 1, 'reconnect must not automatically retry a refused speech token');
+      assert.deepEqual(await talk.submitText('I can continue by typing.'), { accepted: true });
+      assert.deepEqual(h.requests.at(-1), { type: 'transcript', fields: { seq: 0, text: 'I can continue by typing.' } });
+      assert.deepEqual(h.finals, ['I can continue by typing.']);
+      assert.equal(fetches, 1);
+      if (phase === 'idle') assert.equal(h.requests[0].type, 'start');
+      else assert.equal(h.requests.length, 1);
+    });
+  }
+}
+
+test('token refusal on backend reconnect releases an existing mic and leaves typed transport ready', async () => {
+  let fetches = 0;
+  const api = createApiClient({ fetchImpl: async () => {
+    fetches += 1;
+    return fetches === 1 ? new Response(JSON.stringify(token))
+      : new Response(JSON.stringify({ detail: 'You can keep typing while the microphone is unavailable.' }), {
+        status: 429, headers: { 'Retry-After': '300' },
+      });
+  } });
+  const h = harness({ getToken: (id, options) => api.getSttToken(id, options) });
+  await h.controller.start(); h.audio();
+  const old = h.connection();
+  h.context.connectionState = 'reconnecting'; h.controller.updateContext();
+  assert.ok(old.closed > 0);
+  h.context.connectionState = 'connected'; h.controller.updateContext();
+  await flush();
+  assert.equal(fetches, 2);
+  assert.equal(h.connection(), null);
+  assert.equal(h.states.at(-1), 'error');
+  assert.equal(h.controller.wanted, false);
+  h.controller.updateContext();
+  await flush();
+  assert.equal(fetches, 2);
+  await h.controller.sendText('My next explanation.');
+  assert.deepEqual(h.finals, ['My next explanation.']);
+  old.emit('committed_transcript_with_timestamps', { text: 'Stale microphone text', words: [] });
+  assert.equal(h.requests.length, 1);
+});
 
 test('duration remains seconds, ignores non-word events, and never invents missing timings', () => {
   assert.equal(transcriptDuration([

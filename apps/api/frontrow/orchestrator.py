@@ -64,6 +64,8 @@ class Orchestrator:
         # Clock time the most recent tick started, or None before any tick.
         self.last_tick_start: float | None = None
         self._inflight_tick: "asyncio.Task[None] | None" = None
+        self._child_tasks: set[asyncio.Task] = set()
+        self._closed = False
 
     # --- event plumbing ---------------------------------------------------
 
@@ -127,13 +129,29 @@ class Orchestrator:
         if self._inflight_tick is not None and not self._inflight_tick.done():
             await self._inflight_tick
 
+    def _track(self, task: asyncio.Task) -> asyncio.Task:
+        self._child_tasks.add(task)
+        task.add_done_callback(self._child_tasks.discard)
+        return task
+
+    async def close(self) -> None:
+        """Stop tick work and all fan-out children without starting another call."""
+        self._closed = True
+        tasks = set(self._child_tasks)
+        if self._inflight_tick is not None:
+            tasks.add(self._inflight_tick)
+        tasks.discard(asyncio.current_task())
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
     # --- single tick ------------------------------------------------------
 
     def _start_react(
         self, listener: Listener, window_text: str
     ) -> "asyncio.Task[Reaction | None]":
         """Start a listener's reaction as an independent task."""
-        return asyncio.ensure_future(
+        return self._track(asyncio.ensure_future(
             listener.react(
                 window_text,
                 self._slides,
@@ -151,10 +169,12 @@ class Orchestrator:
                     else None
                 ),
             )
-        )
+        ))
 
     async def run_tick(self) -> None:
         """Run exactly one tick: fan out, collect, moderate, emit."""
+        if self._closed:
+            return
         self._tick_count += 1
         tick_index = self._tick_count
         self.last_tick_start = self._clock.now()
@@ -190,9 +210,9 @@ class Orchestrator:
         # under the SimulatedClock, advancing time triggers the timeout
         # deterministically. Each react task is independent, so the timeout
         # does NOT cancel siblings — only genuinely slow tasks are cut off.
-        timeout = asyncio.ensure_future(
+        timeout = self._track(asyncio.ensure_future(
             self._clock.sleep(self._config.per_listener_timeout_seconds)
-        )
+        ))
         pending = set(react_tasks)
         while pending:
             done, pending = await asyncio.wait(
@@ -211,6 +231,8 @@ class Orchestrator:
             except asyncio.CancelledError:
                 pass
 
+        if self._closed:
+            return
         reactions: list[Reaction] = []
         handraises: list[HandRaise] = []
 
@@ -312,7 +334,7 @@ class Orchestrator:
         Runs after ``tick_complete`` so the room score is never delayed; the
         next tick's listeners see the result. A failure keeps the old notes.
         """
-        if self._summarizer is None:
+        if self._closed or self._summarizer is None:
             return
         now = self._clock.now()
         new = [c for c in self._transcript.chunks if self._summarized_until < c.end <= now]
@@ -322,13 +344,18 @@ class Orchestrator:
             self._talk_summary, self._transcript.full_text(new)
         )
         try:
+            # Create inside the context: asyncio tasks inherit it at creation.
+            # Direct closing ticks also need their summary tracked for cutoff.
             with llm_call_context("fast", "summary", self._llm_observer):
-                payload = await self._summarizer.complete_json(
-                    system,
-                    user,
-                    model=self._config.llm_model_fast,
-                    timeout=self._config.llm_timeout_seconds,
-                )
+                summary_task = self._track(asyncio.ensure_future(
+                    self._summarizer.complete_json(
+                        system,
+                        user,
+                        model=self._config.llm_model_fast,
+                        timeout=self._config.llm_timeout_seconds,
+                    )
+                ))
+            payload = await summary_task
         except Exception as exc:  # noqa: BLE001 - keep the previous notes
             self._emit("summary_error", tick=tick_index, error=type(exc).__name__)
             return
@@ -349,6 +376,8 @@ class Orchestrator:
         Instead we emit ``skipped_tick`` and let the in-flight tick continue.
         At most one tick task is ever in flight per session.
         """
+        if self._closed:
+            return
         if self._tick_running:
             self._emit("skipped_tick")
             return

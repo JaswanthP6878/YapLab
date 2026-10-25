@@ -27,6 +27,29 @@ export class SessionClientError extends Error {
   }
 }
 
+const BUSY_MESSAGE = 'The practice room is busy. Try again in a few minutes.';
+const nonemptyText = (value) => typeof value === 'string' ? value.trim() : '';
+
+function retrySeconds(header, now) {
+  const value = nonemptyText(header);
+  if (!value) return undefined;
+  if (/^\d+$/.test(value)) {
+    const seconds = Number(value);
+    return Number.isSafeInteger(seconds) ? seconds : undefined;
+  }
+  // HTTP dates contain month/day names; reject malformed numeric delays.
+  if (!/[a-z]/i.test(value)) return undefined;
+  const deadline = Date.parse(value);
+  return Number.isFinite(deadline) ? Math.max(0, Math.ceil((deadline - now()) / 1000)) : undefined;
+}
+
+function retryHint(seconds) {
+  if (seconds === 0) return 'Try again shortly.';
+  const unit = seconds < 60 ? 'second' : seconds < 3600 ? 'minute' : 'hour';
+  const amount = Math.ceil(seconds / (unit === 'second' ? 1 : unit === 'minute' ? 60 : 3600));
+  return `Try again in ${amount} ${unit}${amount === 1 ? '' : 's'}.`;
+}
+
 function serverError(envelope) {
   return new SessionClientError(envelope.message, { envelope, request: envelope.request, id: envelope.id, detail: envelope.detail });
 }
@@ -44,7 +67,7 @@ function notify(listeners, value) {
 
 /**
  * Injectable transport for tests. No provider keys belong in this client.
- * @param {{apiUrl?:string,fetchImpl?:typeof fetch,WebSocketImpl?:typeof WebSocket,FormDataImpl?:typeof FormData,setTimeoutImpl?:typeof setTimeout,clearTimeoutImpl?:typeof clearTimeout,requestTimeoutMs?:number,origin?:string}} options
+ * @param {{apiUrl?:string,fetchImpl?:typeof fetch,WebSocketImpl?:typeof WebSocket,FormDataImpl?:typeof FormData,setTimeoutImpl?:typeof setTimeout,clearTimeoutImpl?:typeof clearTimeout,nowImpl?:()=>number,requestTimeoutMs?:number,origin?:string}} options
  */
 export function createApiClient(options = {}) {
   const base = normalizeApiBase(options.apiUrl ?? API_URL);
@@ -54,14 +77,23 @@ export function createApiClient(options = {}) {
   const later = options.setTimeoutImpl ?? globalThis.setTimeout.bind(globalThis);
   const cancel = options.clearTimeoutImpl ?? globalThis.clearTimeout.bind(globalThis);
   const timeoutMs = options.requestTimeoutMs ?? 15_000;
+  const now = options.nowImpl ?? Date.now;
 
   async function jsonRequest(path, init = {}) {
     if (typeof fetchImpl !== 'function') throw new SessionClientError('This browser does not support HTTP requests.');
     const response = await fetchImpl(resolveApiUrl(path, base), init);
     const body = await response.json().catch(() => null);
     if (!response.ok) {
-      const detail = typeof body?.detail === 'string' ? body.detail : body?.message;
-      throw new SessionClientError(detail || `The backend request failed (${response.status}).`, { status: response.status });
+      const busy = response.status === 429 || response.status === 503;
+      const detail = nonemptyText(body?.detail) || nonemptyText(body?.message);
+      const retryAfterSeconds = retrySeconds(response.headers?.get?.('Retry-After'), now);
+      let message = detail || (busy ? BUSY_MESSAGE : `The backend request failed (${response.status}).`);
+      // An alternative such as typing or starting a new session may be the only
+      // recovery: Retry-After can describe expiry rather than a quota reset.
+      const continuation = /\b(?:continue|keep)\b.*\btyp(?:e|ing)\b|\bstart\b.*\bnew session\b/i.test(message);
+      if (busy && retryAfterSeconds !== undefined && !continuation && !/\btry again\b/i.test(message)) message += ` ${retryHint(retryAfterSeconds)}`;
+      throw new SessionClientError(message, { status: response.status,
+        ...(retryAfterSeconds === undefined ? {} : { retryAfterSeconds }) });
     }
     if (!body || typeof body !== 'object') throw new SessionClientError('The backend returned an invalid JSON response.');
     return body;

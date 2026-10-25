@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { API_URL, createApiClient, normalizeApiBase, resolveApiUrl, sessionWebSocketUrl } from '../client.js';
+import { API_URL, SessionClientError, createApiClient, normalizeApiBase, resolveApiUrl, sessionWebSocketUrl } from '../client.js';
 
 function setup(options = {}) {
   const sockets = [];
@@ -78,6 +78,80 @@ test('HTTP errors are actionable and do not silently treat failed JSON responses
   await assert.rejects(api.getReport('s'), (error) => error.status === 409 && error.message === 'Session is ended');
   const malformed = createApiClient({ fetchImpl: async () => ({ ok: true, status: 200, json: async () => { throw new Error('bad json'); } }) });
   await assert.rejects(malformed.getReport('s'), /invalid JSON/);
+});
+
+test('session creation and PDF uploads retain human 429/503 messages and retry delays without retrying', async () => {
+  class Form { append() {} }
+  const calls = [];
+  for (const status of [429, 503]) {
+    const api = createApiClient({ apiUrl: 'https://api.test', FormDataImpl: Form,
+      fetchImpl: async (url) => {
+        calls.push(url);
+        return new Response(JSON.stringify({ detail: 'The room is temporarily unavailable.' }), {
+          status, headers: { 'Retry-After': '90' },
+        });
+      } });
+    for (const request of [() => api.createSession(), () => api.uploadDeck({ name: 'talk.pdf' })]) {
+      await assert.rejects(request(), (error) => {
+        assert.ok(error instanceof SessionClientError);
+        assert.equal(error.status, status);
+        assert.equal(error.retryAfterSeconds, 90);
+        assert.equal(error.message, 'The room is temporarily unavailable. Try again in 2 minutes.');
+        return true;
+      });
+    }
+  }
+  assert.deepEqual(calls, ['https://api.test/sessions', 'https://api.test/sessions/upload',
+    'https://api.test/sessions', 'https://api.test/sessions/upload']);
+});
+
+test('opaque busy responses use the human fallback and preserve existing server retry advice', async () => {
+  for (const status of [429, 503]) {
+    const api = createApiClient({ fetchImpl: async () => new Response('<html>unavailable</html>', { status }) });
+    await assert.rejects(api.createSession(), (error) => error.status === status
+      && error.message === 'The practice room is busy. Try again in a few minutes.'
+      && !('retryAfterSeconds' in error));
+  }
+  const message = 'Please try again after your current practice session.';
+  const api = createApiClient({ fetchImpl: async () => new Response(JSON.stringify({ message }), {
+    status: 429, headers: { 'Retry-After': '1200' },
+  }) });
+  await assert.rejects(api.getSttToken('s'), (error) => error.message === message && error.retryAfterSeconds === 1200);
+});
+
+test('Retry-After accepts HTTP dates and zero but ignores malformed delays', async () => {
+  const now = Date.UTC(2026, 9, 25, 20, 0, 0);
+  const cases = [
+    [new Date(now + 90_000).toUTCString(), 90, 'Try again in 2 minutes.'],
+    ['0', 0, 'Try again shortly.'],
+    ['-5', undefined, ''], ['1.5', undefined, ''], ['invalid', undefined, ''],
+    ['999999999999999999999999999999', undefined, ''],
+  ];
+  for (const [header, expected, hint] of cases) {
+    const api = createApiClient({ nowImpl: () => now, fetchImpl: async () => new Response(JSON.stringify({ detail: 'Please wait.' }), {
+      status: 503, headers: { 'Retry-After': header },
+    }) });
+    await assert.rejects(api.createSession(), (error) => {
+      assert.equal(error.retryAfterSeconds, expected);
+      assert.equal(error.message, `Please wait.${hint ? ` ${hint}` : ''}`);
+      if (expected === undefined) assert.equal('retryAfterSeconds' in error, false);
+      return true;
+    });
+  }
+});
+
+test('per-session voice denial preserves typed recovery without promising a same-room retry', async () => {
+  const message = 'This session has reached its voice-token limit. Continue by typing to the room, or start a new session.';
+  let calls = 0;
+  const api = createApiClient({ fetchImpl: async () => {
+    calls += 1;
+    return new Response(JSON.stringify({ detail: message }), {
+      status: 429, headers: { 'Retry-After': '1200' },
+    });
+  } });
+  await assert.rejects(api.getSttToken('s'), (error) => error.message === message
+    && error.status === 429 && error.retryAfterSeconds === 1200);
+  assert.equal(calls, 1);
 });
 
 test('hello gates readiness; request IDs correlate out-of-order acks and nonfatal errors', async () => {

@@ -70,7 +70,11 @@ Only committed code is deployed. Avoid API deploys during a demo: a restart ends
 
 ## Costs, access, teardown
 
-Anyone who can open the app spends your LLM and ElevenLabs credits, so set spending limits with the providers. A static IP costs a little while the VM runs and a little more while it is stopped. To remove everything:
+The API now limits session admissions, STT-token attempts, and room lifetimes.
+Counters and rooms live in one worker and reset on restart. Keep the API bound
+to `127.0.0.1`; only Caddy should reach it publicly. Before the judging deployment,
+complete [Jaswanth's checklist](../docs/demo-hardening.md#owner-checklist-after-merge).
+Application quotas reduce usage but do not impose a dollar spending cap. A static IP costs a little while the VM runs and a little more while it is stopped. To remove everything:
 
 ```bash
 gcloud compute instances delete yaplab-api --zone us-east1-b

@@ -119,6 +119,7 @@ class Session:
         # Echo suppression: mic input is dropped until this clock time.
         self._playback_until: float | None = None
         self._evaluations: set[asyncio.Task[None]] = set()
+        self._closed = False
 
     # --- plumbing -----------------------------------------------------------
 
@@ -238,12 +239,40 @@ class Session:
 
     async def close(self) -> None:
         """Cancel background work (tick loop, evaluations), e.g. on shutdown."""
+        self._closed = True
         tasks = [t for t in (self._loop_task, *self._evaluations) if t is not None]
         for task in tasks:
             task.cancel()
+        await self.orchestrator.close()
         await asyncio.gather(*tasks, return_exceptions=True)
-        await self.orchestrator.wait_idle()
         self._log_llm_summary()
+
+    async def end_for_report(self) -> None:
+        """End an abandoned/expired run using accepted data and no fresh inference.
+
+        Normal presenter commands retain their closing tick and answer judging.
+        A policy cutoff cancels paid work first, then follows the same state chain
+        so the ordinary report endpoint remains available.
+        """
+        await self.close()
+        if self._answer is not None:
+            answer, self._answer = self._answer, None
+            self.moderator.resolve(answer.hand.question_id)
+            self._record("answer", question_id=answer.hand.question_id,
+                         listener=answer.hand.listener_id, text=" ".join(answer.parts))
+        self._playback_until = None
+        if self.state is SessionState.IDLE:
+            self._transition(SessionState.PRESENTING)
+        if self.state is SessionState.PRESENTING:
+            lowered = self.moderator.lower()
+            if lowered is not None:
+                self.orchestrator.record_hand("hand_lowered", lowered)
+            self._transition(SessionState.QA)
+            self._record("qa_pool", size=len(self.moderator.qa_pool))
+        if self.state is SessionState.QA:
+            self._transition(SessionState.REPORTING)
+        if self.state is SessionState.REPORTING:
+            self.finish()
 
     # --- inputs from the frontend -------------------------------------------
 
@@ -347,11 +376,14 @@ class Session:
         self._record(
             "answer", question_id=hand.question_id, listener=hand.listener_id, text=text
         )
-        task = asyncio.ensure_future(self._evaluate(hand, text))
-        self._evaluations.add(task)
-        task.add_done_callback(self._evaluations.discard)
+        if not self._closed:
+            task = asyncio.ensure_future(self._evaluate(hand, text))
+            self._evaluations.add(task)
+            task.add_done_callback(self._evaluations.discard)
 
     async def _evaluate(self, hand: HandRaise, text: str) -> None:
+        if self._closed:
+            return
         listener = self.listeners[hand.listener_id]
         try:
             verdict = await listener.evaluate_answer(

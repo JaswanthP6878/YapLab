@@ -37,6 +37,16 @@ Nano passed 30/30 listener-schema checks under five-way concurrency, with probe 
 - Recorded authenticated model/reasoning probes, replay statistics, and a three-minute live session with per-tier latency, usage, fallbacks, and cost.
 - Added an MIT code license while retaining the TalkMoves artifacts' CC BY-NC-SA 4.0 terms.
 
+## Public demo limits
+
+The public demo admits 6 sessions per visitor IP per rolling hour, 150 per UTC day,
+and 20 live rooms at once. Each room allows 10 STT-token attempts. Disconnected
+rooms end after 60 seconds; all rooms end at 20 minutes from creation. Reports
+and audio remain available for one hour after ending. Speech limits leave typed
+input usable. These limits run in one API process and reset on restart; they do
+not replace provider spending controls. See the [judging runbook](docs/demo-hardening.md)
+for settings, verification, and Jaswanth's billing and uptime checklist.
+
 ## Why
 
 Most students rehearse presentations alone. Practicing in front of an audience leads to better real performances, but not everyone has a study group, confident English, or time for office hours. YapLab gives every student an audience to practice with, any time, with no judgment.
@@ -272,8 +282,8 @@ See `.env.example` for the rest.
 
 | Command | Covers |
 |---|---|
-| `cd apps/api && uv run python verify.py` | 72 offline backend checks: moderator, sessions, grounding, memory, server, voice, natural hands, teaching moves; includes 11 Nebius provider/routing/usage checks (the fitted-model check runs with the data extra) |
-| `cd frontend && npm run test:live` | 75 live-bridge/report tests: transport, replay, speech, audio, talk lifecycle, teaching moves |
+| `cd apps/api && uv run python verify.py` | Offline backend checks: moderator, sessions, grounding, memory, server, voice, natural hands, teaching moves, Nebius routing/usage, and demo hardening (the fitted-model check runs with the data extra) |
+| `cd frontend && npm run test:live` | Live-bridge/report tests: transport, replay, speech, audio, talk lifecycle, teaching moves, and quota fallback |
 | `cd frontend && npm run build` | Production build |
 
 After changing `frontrow/protocol.py`, regenerate the schema with `uv run python -m frontrow.protocol > ../../packages/protocol/schema.json`.
@@ -290,6 +300,8 @@ infra/gcp/deploy.sh                             # builds and ships API + fronten
 
 See [infra/README.md](infra/README.md) for the full walkthrough.
 
+
+
 ## Data
 
 Our report-only teaching-moves coach uses TalkMoves classroom annotations, a TF-IDF and logistic regression classifier, and lesson-level bootstrap benchmarks. See the [dataset datasheet](data/README.md) for provenance and licensing, and [data science methods and ethics](docs/data-science.md) for measured results and figures.
@@ -299,6 +311,7 @@ Our report-only teaching-moves coach uses TalkMoves classroom annotations, a TF-
 - [Backend interface](docs/backend-interface.md): REST, WebSocket messages, event catalog, speech engines
 - [Live bridge guide](frontend/src/live/README.md): how the Teaching room talks to the backend
 - [Voice verification](docs/voice-verification.md): real ElevenLabs checks
+- [Judging runbook](docs/demo-hardening.md): demo limits, cleanup, billing and uptime checklist
 - [Deployment guide](infra/README.md): GCP VM, HTTPS, everyday commands
 - [Demo video](video/README.md): Remotion intro and how to append the demo recording
 - [Feature specs](.kiro/specs/): requirements, design, and tasks per feature
